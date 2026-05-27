@@ -10,8 +10,7 @@ namespace clf::ui {
 
 class SelectedUnitPanel final {
 public:
-    void Render(entt::entity selectedEntity, const sim::World& world);
+    void Render(entt::entity selectedEntity, sim::World& world);
 };
 
 } // namespace clf::ui
-

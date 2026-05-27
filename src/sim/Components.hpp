@@ -6,3 +6,5 @@
 #include "sim/components/TransformComponent.hpp"
 #include "sim/components/VehicleComponent.hpp"
 #include "sim/components/CollisionComponent.hpp"
+#include "sim/components/ControlModeComponent.hpp"
+#include "sim/components/WaypointPathComponent.hpp"

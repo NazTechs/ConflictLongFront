@@ -21,6 +21,7 @@ add_executable(ConflictLongFront
     src/sim/ScenarioManager.cpp
     src/sim/ai/AiSettings.cpp
     src/sim/ai/TankAISystem.cpp
+    src/sim/manual/ManualMovementSystem.cpp
     src/sim/physics/MovementSystem.cpp
     src/sim/physics/CollisionSystem.cpp
     src/sim/weapons/CombatLog.cpp
@@ -28,6 +29,7 @@ add_executable(ConflictLongFront
     src/sim/damage/DamageModel.cpp
     src/sim/visibility/VisibilityMask.cpp
     src/sim/visibility/FogOfWarSystem.cpp
+    src/sim/visibility/TeamFogOfWarSystem.cpp
     src/render/Renderer2D.cpp
     src/render/TerrainRenderer.cpp
     src/render/DebugOverlayRenderer.cpp

@@ -54,6 +54,7 @@ The build copies `data/` next to the executable automatically.
 - Mouse wheel: zoom
 - Right mouse drag: pan camera (Spectator/Debug view)
 - Left click: select tank
+- Right click: set manual waypoint for selected tank (Shift+Right click to append)
 - Esc: quit
 
 ## Persistent UI settings
@@ -91,6 +92,7 @@ The build copies `data/` next to the executable automatically.
   - In unit views, enemies are rendered only when detected (optional)
 - Fog of war (unit views):
   - terrain is bright where the viewer tank can see (range/FOV/terrain LOS), dim where it has seen before, and dark where unknown
+  - `View` panel -> `Fog view`: Spectator / Selected unit / Selected team
 - UI panels:
   - `Battle Control`: pause, sim speed, seed, restart/randomize
   - `View`: view mode + overlay toggles

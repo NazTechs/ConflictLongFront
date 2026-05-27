@@ -2,6 +2,12 @@
 
 namespace clf::core {
 
+enum class FogViewMode : int {
+    Spectator = 0,
+    SelectedUnit = 1,
+    SelectedTeam = 2,
+};
+
 struct SimulationDebugSettings final {
     bool showAllUnitsInDebugView = true;
     bool showOnlyDetectedUnitsInUnitView = true;
@@ -21,6 +27,9 @@ struct SimulationDebugSettings final {
     bool showDamageZones = false;
 
     bool showFogOfWar = true;
+    FogViewMode fogViewMode = FogViewMode::SelectedUnit;
+    int fogTeamId = 0;
+    bool fogShowExploredMemory = true;
     bool showSearchWaypoints = true;
     bool showMovementVectors = true;
     bool showAiState = true;

@@ -24,6 +24,7 @@ class World;
 class ScenarioManager;
 namespace visibility {
 class FogOfWarSystem;
+class TeamFogOfWarSystem;
 }
 }
 
@@ -57,6 +58,7 @@ private:
     void ProcessEvents();
     void UpdateCamera(double frameDtSeconds);
     void SelectEntityAtScreen(float xPx, float yPx);
+    void IssueWaypointAtScreen(float xPx, float yPx, bool append);
     void StepSimulationFixed(double dtSeconds);
     void RenderFrame();
     entt::entity ResolveViewerEntity() const;
@@ -69,6 +71,9 @@ private:
     bool m_running = false;
 
     bool m_rightMouseDown = false;
+    bool m_rightMouseMoved = false;
+    float m_rightDownX = 0.0f;
+    float m_rightDownY = 0.0f;
     entt::entity m_selectedEntity = entt::null;
     SimulationDebugSettings m_debugSettings{};
     render::ViewMode m_viewMode = render::ViewMode::Spectator;
@@ -84,6 +89,7 @@ private:
     std::unique_ptr<render::Renderer2D> m_renderer2D;
     std::unique_ptr<render::CameraController> m_cameraController;
     std::unique_ptr<sim::visibility::FogOfWarSystem> m_fogSystem;
+    std::unique_ptr<sim::visibility::TeamFogOfWarSystem> m_teamFogSystem;
 
     std::unique_ptr<ui::BattleControlPanel> m_battleControlPanel;
     std::unique_ptr<ui::ViewControlPanel> m_viewControlPanel;

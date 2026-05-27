@@ -72,6 +72,9 @@ AppSettings SettingsManager::LoadOrDefaults() const
     d.showBlockedLosPoint = j.value("show_blocked_los_point", d.showBlockedLosPoint);
     d.showShotTraces = j.value("show_projectile_traces", d.showShotTraces);
     d.showFogOfWar = j.value("show_fog_of_war", d.showFogOfWar);
+    d.fogViewMode = static_cast<FogViewMode>(j.value("fog_view_mode", static_cast<int>(d.fogViewMode)));
+    d.fogTeamId = j.value("fog_team_id", d.fogTeamId);
+    d.fogShowExploredMemory = j.value("fog_show_explored_memory", d.fogShowExploredMemory);
     d.highlightSelection = j.value("highlight_selection", d.highlightSelection);
 
     d.showTerrainHeightOverlay = j.value("show_terrain_height_overlay", d.showTerrainHeightOverlay);
@@ -109,6 +112,9 @@ void SettingsManager::Save(const AppSettings& settings) const
     j["show_blocked_los_point"] = d.showBlockedLosPoint;
     j["show_projectile_traces"] = d.showShotTraces;
     j["show_fog_of_war"] = d.showFogOfWar;
+    j["fog_view_mode"] = static_cast<int>(d.fogViewMode);
+    j["fog_team_id"] = d.fogTeamId;
+    j["fog_show_explored_memory"] = d.fogShowExploredMemory;
     j["highlight_selection"] = d.highlightSelection;
 
     j["show_terrain_height_overlay"] = d.showTerrainHeightOverlay;

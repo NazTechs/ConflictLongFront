@@ -16,6 +16,8 @@
 #include "sim/damage/DamageComponent.hpp"
 #include "sim/ai/TankAIComponent.hpp"
 #include "sim/components/CollisionComponent.hpp"
+#include "sim/components/ControlModeComponent.hpp"
+#include "sim/components/WaypointPathComponent.hpp"
 
 namespace clf::render {
 
@@ -202,6 +204,22 @@ void DebugOverlayRenderer::Render(const sim::World& world,
         if (options.highlightSelection) {
             const float selR = std::max(8.0f, static_cast<float>(tank.radius_m) * ppm * 1.4f);
             DrawCircle(m_renderer, centerPx, selR, 255, 255, 255, 200);
+        }
+
+        if (options.showSearchWaypoints) {
+            if (const auto* mode = registry.try_get<sim::ControlModeComponent>(selectedEntity)) {
+                if (mode->mode == sim::ControlMode::Manual) {
+                    if (const auto* path = registry.try_get<sim::WaypointPathComponent>(selectedEntity)) {
+                        glm::vec2 prev = centerPx;
+                        for (std::size_t i = 0; i < path->waypoints.size(); ++i) {
+                            const glm::vec2 wpPx = camera.WorldToScreenPx(path->waypoints[i], viewportW, viewportH);
+                            DrawRay(m_renderer, prev, wpPx, 120, 255, 120, 200);
+                            DrawCross(m_renderer, wpPx, 6.0f, 120, 255, 120, 230);
+                            prev = wpPx;
+                        }
+                    }
+                }
+            }
         }
 
         if (const auto* gun = registry.try_get<sim::DirectFireGun>(selectedEntity)) {

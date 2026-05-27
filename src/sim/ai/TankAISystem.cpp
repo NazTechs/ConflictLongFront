@@ -9,6 +9,7 @@
 
 #include "sim/Components.hpp"
 #include "sim/components/DetectionComponent.hpp"
+#include "sim/components/ControlModeComponent.hpp"
 #include "sim/components/SensorComponent.hpp"
 #include "sim/components/TransformComponent.hpp"
 #include "sim/components/VehicleComponent.hpp"
@@ -146,6 +147,10 @@ void UpdateTankAI(
         auto& det = view.get<Detection>(e);
         auto& ai = view.get<TankAI>(e);
 
+        const auto* control = registry.try_get<ControlModeComponent>(e);
+        const bool allowMovementAI =
+            (control == nullptr) || (control->mode == ControlMode::Automatic);
+
         if (const auto* dmg = registry.try_get<damage::DamageState>(e)) {
             if (dmg->destroyed) {
                 ai.state = TankAIState::Destroyed;
@@ -195,6 +200,9 @@ void UpdateTankAI(
         switch (ai.state) {
             case TankAIState::Idle:
             case TankAIState::Search: {
+                if (!allowMovementAI) {
+                    break;
+                }
                 ai.state = TankAIState::SearchSelectWaypoint;
                 ai.state_time_s = 0.0;
                 ai.has_waypoint = false;
@@ -202,6 +210,9 @@ void UpdateTankAI(
             }
 
             case TankAIState::SearchSelectWaypoint: {
+                if (!allowMovementAI) {
+                    break;
+                }
                 // Priority 1: investigate last known enemy position.
                 if (det.memory_remaining_s > 0.0) {
                     ai.search_waypoint_m = det.last_known_target_pos_m;
@@ -231,6 +242,9 @@ void UpdateTankAI(
 
             case TankAIState::MoveToWaypoint:
             case TankAIState::ScanWhileMoving: {
+                if (!allowMovementAI) {
+                    break;
+                }
                 if (!ai.has_waypoint) {
                     ai.state = TankAIState::SearchSelectWaypoint;
                     ai.state_time_s = 0.0;
@@ -292,6 +306,9 @@ void UpdateTankAI(
             }
 
             case TankAIState::Scan: {
+                if (!allowMovementAI) {
+                    break;
+                }
                 ctrl.desired_speed_mps = 0.0;
 
                 if (ai.state_time_s > 7.0) {
@@ -308,7 +325,9 @@ void UpdateTankAI(
             }
 
             case TankAIState::AimAtTarget: {
-                ctrl.desired_speed_mps = 0.0;
+                if (allowMovementAI) {
+                    ctrl.desired_speed_mps = 0.0;
+                }
 
                 if (det.current_target == entt::null ||
                     !registry.valid(det.current_target) ||
@@ -323,7 +342,9 @@ void UpdateTankAI(
                 const double bearing = AngleTo(xf.position_m, txf.position_m);
 
                 ctrl.desired_turret_heading_rad = bearing;
-                ctrl.desired_hull_heading_rad = bearing;
+                if (allowMovementAI) {
+                    ctrl.desired_hull_heading_rad = bearing;
+                }
 
                 if (!det.target_has_los) {
                     ai.state = TankAIState::Reposition;
@@ -334,6 +355,9 @@ void UpdateTankAI(
             }
 
             case TankAIState::Reposition: {
+                if (!allowMovementAI) {
+                    break;
+                }
                 const glm::dvec2 lastKnown =
                     ClampToWorld(det.last_known_target_pos_m, halfExtent);
 

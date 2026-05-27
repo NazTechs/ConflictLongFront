@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
+#include "core/ScopedTimer.hpp"
 #include "sim/Components.hpp"
 #include "sim/WeaponSystem.hpp"
 #include "sim/DetectionSystem.hpp"
@@ -18,6 +19,7 @@
 #include "sim/components/VehicleComponent.hpp"
 #include "sim/ai/TankAIComponent.hpp"
 #include "sim/ai/TankAISystem.hpp"
+#include "sim/manual/ManualMovementSystem.hpp"
 #include "sim/damage/ArmorComponent.hpp"
 #include "sim/damage/DamageComponent.hpp"
 #include "sim/physics/CollisionSystem.hpp"
@@ -44,6 +46,7 @@ World::World()
 
 bool World::LoadData(const std::filesystem::path& dataDir)
 {
+    core::ScopedTimer total("[Startup] World::LoadData");
     const auto weaponsPath = dataDir / "weapons.json";
     const auto unitsPath = dataDir / "units.json";
     const auto aiPath = dataDir / "config" / "ai_settings.json";
@@ -52,11 +55,17 @@ bool World::LoadData(const std::filesystem::path& dataDir)
     m_units.clear();
     m_aiSettings = ai::LoadAiSettingsOrDefaults(aiPath);
 
-    if (!LoadWeapons(weaponsPath)) {
+    {
+        core::ScopedTimer t("[Startup] Load weapons.json");
+        if (!LoadWeapons(weaponsPath)) {
         return false;
+        }
     }
-    if (!LoadUnits(unitsPath)) {
+    {
+        core::ScopedTimer t("[Startup] Load units.json");
+        if (!LoadUnits(unitsPath)) {
         return false;
+        }
     }
     return true;
 }
@@ -186,6 +195,7 @@ void World::Step(double dtSeconds)
 {
     UpdateDetection(m_registry, m_terrain, dtSeconds, m_aiSettings.search.last_known_position_timeout_s);
     ai::UpdateTankAI(m_registry, m_terrain, dtSeconds, m_seed, m_aiSettings);
+    manual::UpdateManualMovement(m_registry, dtSeconds);
 
     physics::UpdateMovement(m_registry, dtSeconds);
     physics::ResolveCollisions(m_registry);
@@ -405,6 +415,8 @@ void World::SpawnTankFromDef(const std::string& name,
     });
 
     m_registry.emplace<Collision>(e, Collision{.radius_m = radius_m});
+    m_registry.emplace<ControlModeComponent>(e, ControlModeComponent{.mode = ControlMode::Automatic});
+    m_registry.emplace<WaypointPathComponent>(e, WaypointPathComponent{});
 
     m_registry.emplace<Sensor>(e, Sensor{
         .range_m = visualRange_m,

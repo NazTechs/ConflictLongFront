@@ -54,6 +54,17 @@ void ViewControlPanel::Render(ViewControlState& inOutState, clf::core::Simulatio
     ImGui::Checkbox("Highlight selection", &inOutDebugSettings.highlightSelection);
     ImGui::Checkbox("Show damage zones", &inOutDebugSettings.showDamageZones);
     ImGui::Checkbox("Show fog of war", &inOutDebugSettings.showFogOfWar);
+    if (inOutDebugSettings.showFogOfWar) {
+        const char* fogLabels[] = {"Spectator", "Selected unit", "Selected team"};
+        int fogMode = static_cast<int>(inOutDebugSettings.fogViewMode);
+        if (ImGui::Combo("Fog view", &fogMode, fogLabels, IM_ARRAYSIZE(fogLabels))) {
+            inOutDebugSettings.fogViewMode = static_cast<clf::core::FogViewMode>(fogMode);
+        }
+        if (inOutDebugSettings.fogViewMode == clf::core::FogViewMode::SelectedTeam) {
+            ImGui::SliderInt("Fog team", &inOutDebugSettings.fogTeamId, 0, 1);
+        }
+        ImGui::Checkbox("Show explored memory", &inOutDebugSettings.fogShowExploredMemory);
+    }
     ImGui::Checkbox("Show search waypoints", &inOutDebugSettings.showSearchWaypoints);
     ImGui::Checkbox("Show movement vectors", &inOutDebugSettings.showMovementVectors);
     ImGui::Checkbox("Show AI state", &inOutDebugSettings.showAiState);

@@ -12,6 +12,9 @@
   "show_blocked_los_point": true,
   "show_projectile_traces": true,
   "show_fog_of_war": true,
+  "fog_view_mode": 1,
+  "fog_team_id": 0,
+  "fog_show_explored_memory": true,
   "highlight_selection": true,
 
   "show_terrain_height_overlay": true,

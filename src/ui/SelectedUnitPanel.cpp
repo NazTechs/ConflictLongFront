@@ -7,6 +7,8 @@
 #include "sim/components/VehicleComponent.hpp"
 #include "sim/components/DetectionComponent.hpp"
 #include "sim/components/SensorComponent.hpp"
+#include "sim/components/ControlModeComponent.hpp"
+#include "sim/components/WaypointPathComponent.hpp"
 #include "sim/World.hpp"
 #include "sim/damage/DamageComponent.hpp"
 
@@ -33,11 +35,11 @@ const char* SubsystemLabel(sim::damage::SubsystemState s)
 
 } // namespace
 
-void SelectedUnitPanel::Render(entt::entity selectedEntity, const sim::World& world)
+void SelectedUnitPanel::Render(entt::entity selectedEntity, sim::World& world)
 {
     ImGui::Begin("Selected Unit");
 
-    const auto& registry = world.Registry();
+    auto& registry = world.Registry();
     if (selectedEntity == entt::null ||
         !registry.valid(selectedEntity) ||
         !registry.all_of<sim::Tank, sim::Transform>(selectedEntity)) {
@@ -67,6 +69,29 @@ void SelectedUnitPanel::Render(entt::entity selectedEntity, const sim::World& wo
     ImGui::Text("Ground: %.1f m", ground_m);
     ImGui::Text("Sensor: %.1f m AGL", tank.sensor_height_m);
     ImGui::Text("Visual range: %.0f m", tank.visual_range_m);
+
+    {
+        auto& mode = registry.get_or_emplace<sim::ControlModeComponent>(selectedEntity);
+        auto& path = registry.get_or_emplace<sim::WaypointPathComponent>(selectedEntity);
+
+        ImGui::Separator();
+        ImGui::TextUnformatted("Control");
+        ImGui::Text("Mode: %s", (mode.mode == sim::ControlMode::Manual) ? "Manual" : "Automatic");
+        ImGui::Text("Waypoints: %d", static_cast<int>(path.waypoints.size()));
+
+        if (ImGui::Button("Set Manual")) {
+            mode.mode = sim::ControlMode::Manual;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Set Automatic")) {
+            mode.mode = sim::ControlMode::Automatic;
+            path.waypoints.clear();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Waypoints")) {
+            path.waypoints.clear();
+        }
+    }
 
     if (const auto* gun = registry.try_get<sim::DirectFireGun>(selectedEntity)) {
         ImGui::Separator();

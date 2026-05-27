@@ -15,6 +15,7 @@
 
 #include "core/Camera2D.hpp"
 #include "core/SettingsManager.hpp"
+#include "core/ScopedTimer.hpp"
 #include "core/Time.hpp"
 #include "render/CameraController.hpp"
 #include "render/Renderer2D.hpp"
@@ -22,6 +23,7 @@
 #include "sim/ScenarioManager.hpp"
 #include "sim/World.hpp"
 #include "sim/visibility/FogOfWarSystem.hpp"
+#include "sim/visibility/TeamFogOfWarSystem.hpp"
 #include "ui/BattleControlPanel.hpp"
 #include "ui/CombatLogPanel.hpp"
 #include "ui/SelectedUnitPanel.hpp"
@@ -51,10 +53,13 @@ Application::~Application()
 
 int Application::Run()
 {
+    core::ScopedTimer totalStartup("[Startup] Total startup");
+
     if (!InitSDL()) {
         return 1;
     }
 
+    core::ScopedTimer settingsTimer("[Startup] Load settings");
     m_settingsManager = std::make_unique<core::SettingsManager>(ResolveSettingsDir());
 
     const core::AppSettings loaded = m_settingsManager->LoadOrDefaults();
@@ -73,10 +78,14 @@ int Application::Run()
 
     m_imguiIniPath = m_settingsManager->ImGuiIniPath().string();
 
-    if (!InitImGui()) {
-        return 1;
+    {
+        core::ScopedTimer t("[Startup] Init ImGui");
+        if (!InitImGui()) {
+            return 1;
+        }
     }
 
+    core::ScopedTimer worldInit("[Startup] Create world/systems");
     m_time = std::make_unique<Time>();
     m_camera = std::make_unique<Camera2D>();
     m_world = std::make_unique<sim::World>();
@@ -84,6 +93,7 @@ int Application::Run()
     m_renderer2D = std::make_unique<render::Renderer2D>(m_renderer);
     m_cameraController = std::make_unique<render::CameraController>();
     m_fogSystem = std::make_unique<sim::visibility::FogOfWarSystem>();
+    m_teamFogSystem = std::make_unique<sim::visibility::TeamFogOfWarSystem>();
 
     m_battleControlPanel = std::make_unique<ui::BattleControlPanel>();
     m_viewControlPanel = std::make_unique<ui::ViewControlPanel>();
@@ -92,12 +102,15 @@ int Application::Run()
 
     const auto dataDir = ResolveDataDir();
 
-    if (!m_world->LoadData(dataDir)) {
+    {
+        core::ScopedTimer t("[Startup] Load data (JSON/config)");
+        if (!m_world->LoadData(dataDir)) {
         spdlog::warn(
             "Failed to load JSON from '{}', using fallback sample data.",
             dataDir.string());
 
         m_world->LoadFallbackSample();
+        }
     }
 
     // Default start: also apply seed-based terrain generation via restart
@@ -106,7 +119,10 @@ int Application::Run()
     initial.seed = m_battleState.seed;
     initial.randomizePositions = false;
 
-    m_scenarioManager->Restart(initial);
+    {
+        core::ScopedTimer t("[Startup] Spawn scenario");
+        m_scenarioManager->Restart(initial);
+    }
 
     m_running = true;
     m_simAccumulatorSeconds = 0.0;
@@ -293,11 +309,22 @@ void Application::ProcessEvents()
         if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
             event.button.button == SDL_BUTTON_RIGHT) {
             m_rightMouseDown = true;
+            m_rightMouseMoved = false;
+            m_rightDownX = event.button.x;
+            m_rightDownY = event.button.y;
         }
 
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
             event.button.button == SDL_BUTTON_RIGHT) {
+            const bool wasDrag = m_rightMouseMoved;
             m_rightMouseDown = false;
+            m_rightMouseMoved = false;
+
+            if (!wasDrag) {
+                const SDL_Keymod mods = SDL_GetModState();
+                const bool append = (mods & SDL_KMOD_SHIFT) != 0;
+                IssueWaypointAtScreen(event.button.x, event.button.y, append);
+            }
         }
 
         if (event.type == SDL_EVENT_MOUSE_MOTION && m_rightMouseDown) {
@@ -306,6 +333,11 @@ void Application::ProcessEvents()
                 m_camera->PanPixels(
                     static_cast<double>(-event.motion.xrel),
                     static_cast<double>(-event.motion.yrel));
+
+                if (std::abs(event.motion.xrel) > 1.0f ||
+                    std::abs(event.motion.yrel) > 1.0f) {
+                    m_rightMouseMoved = true;
+                }
             }
         }
 
@@ -315,6 +347,49 @@ void Application::ProcessEvents()
             return;
         }
     }
+}
+
+void Application::IssueWaypointAtScreen(float xPx, float yPx, bool append)
+{
+    if (!m_world || !m_camera || m_selectedEntity == entt::null) {
+        return;
+    }
+
+    int w = 0;
+    int h = 0;
+
+    SDL_GetWindowSizeInPixels(m_window, &w, &h);
+
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+
+    auto& registry = m_world->Registry();
+
+    if (!registry.valid(m_selectedEntity) ||
+        !registry.all_of<sim::Tank, sim::Transform>(m_selectedEntity)) {
+        return;
+    }
+
+    const glm::dvec2 worldPos =
+        m_camera->ScreenToWorldMeters(
+            glm::vec2(xPx, yPx),
+            w,
+            h);
+
+    auto& mode =
+        registry.get_or_emplace<sim::ControlModeComponent>(m_selectedEntity);
+
+    mode.mode = sim::ControlMode::Manual;
+
+    auto& path =
+        registry.get_or_emplace<sim::WaypointPathComponent>(m_selectedEntity);
+
+    if (!append) {
+        path.waypoints.clear();
+    }
+
+    path.waypoints.push_back(worldPos);
 }
 
 void Application::UpdateCamera(double frameDtSeconds)
@@ -443,18 +518,23 @@ void Application::StepSimulationFixed(double dtSeconds)
         const auto& cfg = m_world->GetAiSettings().fog_of_war;
 
         if (cfg.enabled) {
-            sim::visibility::FogOfWarParams p{};
+            if (m_debugSettings.fogViewMode == core::FogViewMode::SelectedTeam) {
+                if (m_teamFogSystem) {
+                    sim::visibility::TeamFogParams p{};
+                    p.grid_resolution_m = cfg.grid_resolution_m;
+                    p.update_rate_hz = cfg.update_rate_hz;
+                    p.max_teams = 2;
+                    m_teamFogSystem->Configure(p);
+                    m_teamFogSystem->Update(m_world->Registry(), m_world->GetTerrain(), dtSeconds);
+                }
+            } else if (m_debugSettings.fogViewMode == core::FogViewMode::SelectedUnit) {
+                sim::visibility::FogOfWarParams p{};
+                p.grid_resolution_m = cfg.grid_resolution_m;
+                p.update_rate_hz = cfg.update_rate_hz;
 
-            p.grid_resolution_m = cfg.grid_resolution_m;
-            p.update_rate_hz = cfg.update_rate_hz;
-
-            m_fogSystem->Configure(p);
-
-            m_fogSystem->Update(
-                m_world->Registry(),
-                m_world->GetTerrain(),
-                ResolveViewerEntity(),
-                dtSeconds);
+                m_fogSystem->Configure(p);
+                m_fogSystem->Update(m_world->Registry(), m_world->GetTerrain(), ResolveViewerEntity(), dtSeconds);
+            }
         }
     }
 }
@@ -561,15 +641,22 @@ void Application::RenderFrame()
 
     renderOptions.fog.enabled =
         m_debugSettings.showFogOfWar &&
-        (m_viewMode == render::ViewMode::SelectedTank ||
-         m_viewMode == render::ViewMode::BlueTank ||
-         m_viewMode == render::ViewMode::RedTank ||
-         m_viewMode == render::ViewMode::DebugTactical);
+        (m_debugSettings.fogViewMode != core::FogViewMode::Spectator);
 
-    renderOptions.fogMask =
-        (m_fogSystem && renderOptions.fog.enabled)
-            ? &m_fogSystem->Mask()
-            : nullptr;
+    renderOptions.fogMask = nullptr;
+
+    if (renderOptions.fog.enabled) {
+        if (m_debugSettings.fogViewMode == core::FogViewMode::SelectedTeam) {
+            if (m_teamFogSystem) {
+                renderOptions.fogMask =
+                    &m_teamFogSystem->MaskForTeam(m_debugSettings.fogTeamId);
+            }
+        } else if (m_debugSettings.fogViewMode == core::FogViewMode::SelectedUnit) {
+            if (m_fogSystem) {
+                renderOptions.fogMask = &m_fogSystem->Mask();
+            }
+        }
+    }
 
     {
         const auto& cfg = m_world->GetAiSettings().fog_of_war;
@@ -585,7 +672,9 @@ void Application::RenderFrame()
             static_cast<float>(clamp01(1.0 - cfg.unknown_brightness));
 
         renderOptions.fog.known_alpha =
-            static_cast<float>(clamp01(1.0 - cfg.known_brightness));
+            m_debugSettings.fogShowExploredMemory
+                ? static_cast<float>(clamp01(1.0 - cfg.known_brightness))
+                : 0.0f;
     }
 
     m_renderer2D->Render(
