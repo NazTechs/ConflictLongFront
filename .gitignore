@@ -1,0 +1,19 @@
+# Build outputs
+/build/
+/out/
+/cmake-build-*/
+
+# vcpkg (manifest mode installs here by default when using the toolchain)
+**/vcpkg_installed/
+
+# IDE/editor
+/.vscode/
+/.vs/
+/.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Runtime files
+imgui.ini
