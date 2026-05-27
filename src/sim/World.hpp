@@ -9,6 +9,7 @@
 #include <entt/entity/registry.hpp>
 
 #include "sim/DebugDraw.hpp"
+#include "sim/ai/AiSettings.hpp"
 #include "sim/terrain/Terrain.hpp"
 #include "sim/weapons/CombatLog.hpp"
 
@@ -36,6 +37,7 @@ public:
 
     const std::vector<DebugLine>& DebugLines() const;
     const weapons::CombatLog& GetCombatLog() const;
+    const ai::AiSettings& GetAiSettings() const;
 
 private:
     struct WeaponDef {
@@ -93,6 +95,7 @@ private:
     terrain::Terrain m_terrain;
     std::vector<DebugLine> m_debugLines;
     weapons::CombatLog m_combatLog;
+    ai::AiSettings m_aiSettings{};
 
     double m_simTimeSeconds = 0.0;
     std::uint32_t m_seed = 1337;

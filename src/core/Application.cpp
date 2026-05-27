@@ -14,12 +14,14 @@
 #include <imgui_impl_sdlrenderer3.h>
 
 #include "core/Camera2D.hpp"
+#include "core/SettingsManager.hpp"
 #include "core/Time.hpp"
 #include "render/CameraController.hpp"
 #include "render/Renderer2D.hpp"
 #include "sim/Components.hpp"
 #include "sim/ScenarioManager.hpp"
 #include "sim/World.hpp"
+#include "sim/visibility/FogOfWarSystem.hpp"
 #include "ui/BattleControlPanel.hpp"
 #include "ui/CombatLogPanel.hpp"
 #include "ui/SelectedUnitPanel.hpp"
@@ -51,6 +53,20 @@ int Application::Run()
     if (!InitSDL()) {
         return 1;
     }
+
+    m_settingsManager = std::make_unique<core::SettingsManager>(ResolveSettingsDir());
+    const core::AppSettings loaded = m_settingsManager->LoadOrDefaults();
+    m_viewMode = loaded.viewMode;
+    m_paused = loaded.paused;
+    m_simSpeed = loaded.simulationSpeed;
+    m_debugSettings = loaded.debug;
+    m_battleState.seed = loaded.lastRandomSeed;
+    m_battleState.randomizeOnRestart = loaded.randomizeOnRestart;
+    m_battleState.paused = m_paused;
+    m_battleState.simSpeed = static_cast<float>(m_simSpeed);
+    m_viewState.viewMode = m_viewMode;
+    m_imguiIniPath = m_settingsManager->ImGuiIniPath().string();
+
     if (!InitImGui()) {
         return 1;
     }
@@ -61,6 +77,7 @@ int Application::Run()
     m_scenarioManager = std::make_unique<sim::ScenarioManager>(*m_world);
     m_renderer2D = std::make_unique<render::Renderer2D>(m_renderer);
     m_cameraController = std::make_unique<render::CameraController>();
+    m_fogSystem = std::make_unique<sim::visibility::FogOfWarSystem>();
 
     m_battleControlPanel = std::make_unique<ui::BattleControlPanel>();
     m_viewControlPanel = std::make_unique<ui::ViewControlPanel>();
@@ -74,7 +91,7 @@ int Application::Run()
     }
     // Default start: also apply seed-based terrain generation via restart so UI restart is consistent.
     sim::ScenarioSettings initial{};
-    initial.seed = 1337;
+    initial.seed = m_battleState.seed;
     initial.randomizePositions = false;
     m_scenarioManager->Restart(initial);
 
@@ -136,6 +153,13 @@ bool Application::InitImGui()
 
     ImGui_ImplSDL3_InitForSDLRenderer(m_window, m_renderer);
     ImGui_ImplSDLRenderer3_Init(m_renderer);
+
+    if (!m_imguiIniPath.empty()) {
+        io.IniFilename = m_imguiIniPath.c_str();
+        if (std::filesystem::exists(m_imguiIniPath)) {
+            ImGui::LoadIniSettingsFromDisk(m_imguiIniPath.c_str());
+        }
+    }
     return true;
 }
 
@@ -143,6 +167,20 @@ void Application::ShutdownImGui()
 {
     if (ImGui::GetCurrentContext() == nullptr) {
         return;
+    }
+
+    if (m_settingsManager) {
+        core::AppSettings s{};
+        s.viewMode = m_viewMode;
+        s.paused = m_paused;
+        s.simulationSpeed = m_simSpeed;
+        s.lastRandomSeed = m_battleState.seed;
+        s.randomizeOnRestart = m_battleState.randomizeOnRestart;
+        s.debug = m_debugSettings;
+        m_settingsManager->Save(s);
+    }
+    if (!m_imguiIniPath.empty()) {
+        ImGui::SaveIniSettingsToDisk(m_imguiIniPath.c_str());
     }
 
     ImGui_ImplSDLRenderer3_Shutdown();
@@ -301,6 +339,18 @@ void Application::StepSimulationFixed(double dtSeconds)
 {
     m_world->Step(dtSeconds);
     m_simTimeSeconds += dtSeconds;
+
+    if (m_fogSystem && m_debugSettings.showFogOfWar) {
+        // Viewer-dependent fog: update from current view mode entity.
+        const auto& cfg = m_world->GetAiSettings().fog_of_war;
+        if (cfg.enabled) {
+            sim::visibility::FogOfWarParams p{};
+            p.grid_resolution_m = cfg.grid_resolution_m;
+            p.update_rate_hz = cfg.update_rate_hz;
+            m_fogSystem->Configure(p);
+            m_fogSystem->Update(m_world->Registry(), m_world->GetTerrain(), ResolveViewerEntity(), dtSeconds);
+        }
+    }
 }
 
 void Application::RenderFrame()
@@ -315,22 +365,19 @@ void Application::RenderFrame()
 
     // Panels
     if (m_battleControlPanel && m_scenarioManager) {
-        // Persist state across frames (static is fine for now; later move to a UI state object).
-        static ui::BattleControlState s_state{};
-        s_state.paused = m_paused;
-        s_state.simSpeed = static_cast<float>(m_simSpeed);
-        if (m_battleControlPanel->Render(s_state, *m_scenarioManager)) {
+        m_battleState.paused = m_paused;
+        m_battleState.simSpeed = static_cast<float>(m_simSpeed);
+        if (m_battleControlPanel->Render(m_battleState, *m_scenarioManager)) {
             m_selectedEntity = entt::null;
         }
-        m_paused = s_state.paused;
-        m_simSpeed = static_cast<double>(s_state.simSpeed);
+        m_paused = m_battleState.paused;
+        m_simSpeed = static_cast<double>(m_battleState.simSpeed);
     }
 
     if (m_viewControlPanel && m_cameraController) {
-        static ui::ViewControlState s_view{};
-        m_viewControlPanel->Render(s_view, m_debugSettings);
-        m_viewMode = s_view.viewMode;
-        m_cameraController->SetViewMode(s_view.viewMode);
+        m_viewControlPanel->Render(m_viewState, m_debugSettings);
+        m_viewMode = m_viewState.viewMode;
+        m_cameraController->SetViewMode(m_viewState.viewMode);
     }
 
     if (m_selectedUnitPanel) {
@@ -352,23 +399,7 @@ void Application::RenderFrame()
     renderOptions.showOnlyDetectedUnits = m_debugSettings.showOnlyDetectedUnitsInUnitView;
     renderOptions.showAllUnitsInDebugView = m_debugSettings.showAllUnitsInDebugView;
 
-    // Viewer entity for realistic unit views.
-    if (m_viewMode == render::ViewMode::SelectedTank) {
-        renderOptions.viewerEntity = m_selectedEntity;
-    } else if (m_viewMode == render::ViewMode::BlueTank || m_viewMode == render::ViewMode::RedTank) {
-        // Find the team tank.
-        const int team = (m_viewMode == render::ViewMode::BlueTank) ? 0 : 1;
-        auto view = m_world->Registry().view<const sim::Tank>();
-        for (const auto e : view) {
-            if (view.get<const sim::Tank>(e).team_id == team) {
-                renderOptions.viewerEntity = e;
-                break;
-            }
-        }
-    }
-    if (m_viewMode == render::ViewMode::DebugTactical && !m_debugSettings.showAllUnitsInDebugView) {
-        renderOptions.viewerEntity = (m_selectedEntity != entt::null) ? m_selectedEntity : renderOptions.viewerEntity;
-    }
+    renderOptions.viewerEntity = ResolveViewerEntity();
     renderOptions.terrain.showHeightOverlay = m_debugSettings.showTerrainHeightOverlay;
     renderOptions.terrain.contourBands = m_debugSettings.terrainContourBands;
     renderOptions.overlay.showWeaponRange = m_debugSettings.showWeaponRange;
@@ -379,10 +410,59 @@ void Application::RenderFrame()
     renderOptions.overlay.showShotTraces = m_debugSettings.showShotTraces;
     renderOptions.overlay.highlightSelection = m_debugSettings.highlightSelection;
     renderOptions.overlay.showDamageZones = m_debugSettings.showDamageZones;
+    renderOptions.overlay.showSearchWaypoints = m_debugSettings.showSearchWaypoints;
+    renderOptions.overlay.showMovementVectors = m_debugSettings.showMovementVectors;
+    renderOptions.overlay.showAiState = m_debugSettings.showAiState;
+    renderOptions.overlay.showDetectionDebug = m_debugSettings.showDetectionDebug;
+    renderOptions.overlay.showCollisionBounds = m_debugSettings.showCollisionBounds;
+
+    // Fog-of-war overlay (viewer-dependent).
+    renderOptions.fog.enabled = m_debugSettings.showFogOfWar &&
+                               (m_viewMode == render::ViewMode::SelectedTank ||
+                                m_viewMode == render::ViewMode::BlueTank ||
+                                m_viewMode == render::ViewMode::RedTank ||
+                                m_viewMode == render::ViewMode::DebugTactical);
+    renderOptions.fogMask = (m_fogSystem && renderOptions.fog.enabled) ? &m_fogSystem->Mask() : nullptr;
+    {
+        const auto& cfg = m_world->GetAiSettings().fog_of_war;
+        renderOptions.fog.enabled = renderOptions.fog.enabled && cfg.enabled;
+        const auto clamp01 = [](double v) { return std::clamp(v, 0.0, 1.0); };
+        renderOptions.fog.unknown_alpha = static_cast<float>(clamp01(1.0 - cfg.unknown_brightness));
+        renderOptions.fog.known_alpha = static_cast<float>(clamp01(1.0 - cfg.known_brightness));
+    }
     m_renderer2D->Render(*m_world, *m_camera, w, h, renderOptions);
 
     ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), m_renderer);
     SDL_RenderPresent(m_renderer);
+}
+
+entt::entity Application::ResolveViewerEntity() const
+{
+    if (!m_world) {
+        return entt::null;
+    }
+
+    entt::entity viewer = entt::null;
+    // Viewer entity for realistic unit views.
+    if (m_viewMode == render::ViewMode::SelectedTank) {
+        viewer = m_selectedEntity;
+    } else if (m_viewMode == render::ViewMode::BlueTank || m_viewMode == render::ViewMode::RedTank) {
+        // Find the team tank.
+        const int team = (m_viewMode == render::ViewMode::BlueTank) ? 0 : 1;
+        auto view = m_world->Registry().view<const sim::Tank>();
+        for (const auto e : view) {
+            if (view.get<const sim::Tank>(e).team_id == team) {
+                viewer = e;
+                break;
+            }
+        }
+    }
+    if (m_viewMode == render::ViewMode::DebugTactical && !m_debugSettings.showAllUnitsInDebugView) {
+        if (m_selectedEntity != entt::null) {
+            viewer = m_selectedEntity;
+        }
+    }
+    return viewer;
 }
 
 std::filesystem::path Application::ResolveDataDir() const
@@ -392,6 +472,11 @@ std::filesystem::path Application::ResolveDataDir() const
         return std::filesystem::path(basePathUtf8) / "data";
     }
     return std::filesystem::current_path() / "data";
+}
+
+std::filesystem::path Application::ResolveSettingsDir() const
+{
+    return ResolveDataDir() / "settings";
 }
 
 } // namespace clf::core

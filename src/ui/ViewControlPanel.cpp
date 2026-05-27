@@ -49,8 +49,16 @@ void ViewControlPanel::Render(ViewControlState& inOutState, clf::core::Simulatio
     ImGui::Checkbox("Show LOS rays", &inOutDebugSettings.showLosRay);
     ImGui::Checkbox("Show weapon range", &inOutDebugSettings.showWeaponRange);
     ImGui::Checkbox("Show sensor cone", &inOutDebugSettings.showSensorCone);
+    ImGui::Checkbox("Show blocked LOS point", &inOutDebugSettings.showBlockedLosPoint);
     ImGui::Checkbox("Show projectile traces", &inOutDebugSettings.showShotTraces);
+    ImGui::Checkbox("Highlight selection", &inOutDebugSettings.highlightSelection);
     ImGui::Checkbox("Show damage zones", &inOutDebugSettings.showDamageZones);
+    ImGui::Checkbox("Show fog of war", &inOutDebugSettings.showFogOfWar);
+    ImGui::Checkbox("Show search waypoints", &inOutDebugSettings.showSearchWaypoints);
+    ImGui::Checkbox("Show movement vectors", &inOutDebugSettings.showMovementVectors);
+    ImGui::Checkbox("Show AI state", &inOutDebugSettings.showAiState);
+    ImGui::Checkbox("Show detection debug", &inOutDebugSettings.showDetectionDebug);
+    ImGui::Checkbox("Show collision bounds", &inOutDebugSettings.showCollisionBounds);
 
     ImGui::Separator();
     ImGui::TextUnformatted("Terrain");
@@ -63,4 +71,3 @@ void ViewControlPanel::Render(ViewControlState& inOutState, clf::core::Simulatio
 }
 
 } // namespace clf::ui
-

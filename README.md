@@ -56,6 +56,11 @@ The build copies `data/` next to the executable automatically.
 - Left click: select tank
 - Esc: quit
 
+## Persistent UI settings
+
+- ImGui window layout auto-saves to `data/settings/imgui.ini`.
+- Simulation/UI toggles auto-save to `data/settings/user_settings.json` (view mode, checkboxes, sim speed, seed, etc.).
+
 ## Data files (demo)
 
 - `data/weapons.json`:
@@ -65,6 +70,8 @@ The build copies `data/` next to the executable automatically.
   - `name`, `team_id`, `position_m`, `velocity_mps`, `radius_m`, `sensor_height_m`, `visual_range_m`, `weapon`
 - `data/scenarios/default_battle.json`:
   - prototype scenario metadata (not fully wired yet)
+- `data/config/ai_settings.json`:
+  - waypoint search tuning, turret scan tuning, fog-of-war tuning
 
 ## Current demo behavior
 
@@ -74,7 +81,7 @@ The build copies `data/` next to the executable automatically.
 - Fixed-timestep simulation; rendering can be variable-rate
 - Vehicle movement model (speed/turn rates) + circle collision separation
 - Sensor detection model with range + FOV + terrain LOS + detection time (no omniscient targeting)
-- Simple “search and destroy” AI: patrol/search, scan, detect, aim, fire, reposition
+- Simple “search and destroy” AI: picks waypoints, moves across the map while scanning, detects, aims, fires, and repositions
 - Direct-fire ballistics prototype:
   - dispersion-based hit/miss
   - penetration vs. range (simple curve)
@@ -82,6 +89,8 @@ The build copies `data/` next to the executable automatically.
 - View modes (ImGui -> `View` panel):
   - Spectator / Red Tank / Blue Tank / Selected Unit / Debug Tactical
   - In unit views, enemies are rendered only when detected (optional)
+- Fog of war (unit views):
+  - terrain is bright where the viewer tank can see (range/FOV/terrain LOS), dim where it has seen before, and dark where unknown
 - UI panels:
   - `Battle Control`: pause, sim speed, seed, restart/randomize
   - `View`: view mode + overlay toggles

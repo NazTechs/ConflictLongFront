@@ -25,6 +25,11 @@ struct DebugOverlayOptions final {
     bool showShotTraces = true;
     bool highlightSelection = true;
     bool showDamageZones = false;
+    bool showSearchWaypoints = true;
+    bool showMovementVectors = true;
+    bool showAiState = true;
+    bool showDetectionDebug = false;
+    bool showCollisionBounds = false;
 };
 
 class DebugOverlayRenderer final {

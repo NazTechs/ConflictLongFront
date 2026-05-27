@@ -2,11 +2,14 @@
 
 #include <memory>
 #include <filesystem>
+#include <string>
 
 #include <entt/entity/entity.hpp>
 
 #include "core/SimulationDebugSettings.hpp"
 #include "render/ViewMode.hpp"
+#include "ui/BattleControlPanel.hpp"
+#include "ui/ViewControlPanel.hpp"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -19,6 +22,9 @@ class CameraController;
 namespace clf::sim {
 class World;
 class ScenarioManager;
+namespace visibility {
+class FogOfWarSystem;
+}
 }
 
 namespace clf::ui {
@@ -32,6 +38,8 @@ namespace clf::core {
 
 class Camera2D;
 class Time;
+class SettingsManager;
+struct AppSettings;
 
 class Application final {
 public:
@@ -51,8 +59,10 @@ private:
     void SelectEntityAtScreen(float xPx, float yPx);
     void StepSimulationFixed(double dtSeconds);
     void RenderFrame();
+    entt::entity ResolveViewerEntity() const;
 
     std::filesystem::path ResolveDataDir() const;
+    std::filesystem::path ResolveSettingsDir() const;
 
     SDL_Window* m_window = nullptr;
     SDL_Renderer* m_renderer = nullptr;
@@ -62,6 +72,10 @@ private:
     entt::entity m_selectedEntity = entt::null;
     SimulationDebugSettings m_debugSettings{};
     render::ViewMode m_viewMode = render::ViewMode::Spectator;
+    ui::BattleControlState m_battleState{};
+    ui::ViewControlState m_viewState{};
+    std::string m_imguiIniPath;
+    std::unique_ptr<SettingsManager> m_settingsManager;
 
     std::unique_ptr<Time> m_time;
     std::unique_ptr<Camera2D> m_camera;
@@ -69,6 +83,7 @@ private:
     std::unique_ptr<sim::ScenarioManager> m_scenarioManager;
     std::unique_ptr<render::Renderer2D> m_renderer2D;
     std::unique_ptr<render::CameraController> m_cameraController;
+    std::unique_ptr<sim::visibility::FogOfWarSystem> m_fogSystem;
 
     std::unique_ptr<ui::BattleControlPanel> m_battleControlPanel;
     std::unique_ptr<ui::ViewControlPanel> m_viewControlPanel;

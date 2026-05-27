@@ -1,0 +1,27 @@
+{
+  "search": {
+    "min_waypoint_distance_m": 1000.0,
+    "max_waypoint_distance_m": 4000.0,
+    "waypoint_reached_radius_m": 120.0,
+    "stuck_timeout_s": 8.0,
+    "last_known_position_timeout_s": 30.0
+  },
+  "movement": {
+    "default_max_speed_mps": 12.0,
+    "default_acceleration_mps2": 2.0,
+    "default_turn_rate_deg_s": 25.0
+  },
+  "turret": {
+    "scan_speed_deg_s": 20.0,
+    "scan_arc_deg": 120.0
+  },
+  "fog_of_war": {
+    "enabled": true,
+    "grid_resolution_m": 100.0,
+    "update_rate_hz": 8.0,
+    "visible_brightness": 1.0,
+    "known_brightness": 0.45,
+    "unknown_brightness": 0.15
+  }
+}
+

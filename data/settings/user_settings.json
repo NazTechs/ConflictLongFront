@@ -1,0 +1,29 @@
+{
+  "view_mode": "Spectator",
+  "paused": false,
+  "simulation_speed": 1.0,
+  "last_random_seed": 1337,
+  "randomize_on_restart": false,
+
+  "show_weapon_range": true,
+  "show_visual_range": true,
+  "show_los_rays": true,
+  "show_sensor_cone": true,
+  "show_blocked_los_point": true,
+  "show_projectile_traces": true,
+  "show_fog_of_war": true,
+  "highlight_selection": true,
+
+  "show_terrain_height_overlay": true,
+  "terrain_contour_bands": true,
+
+  "show_search_waypoints": true,
+  "show_movement_vectors": true,
+  "show_ai_state": true,
+  "show_detection_debug": false,
+  "show_collision_bounds": false,
+  "show_damage_zones": false,
+
+  "show_only_detected_units": true,
+  "show_all_units_in_debug_view": true
+}

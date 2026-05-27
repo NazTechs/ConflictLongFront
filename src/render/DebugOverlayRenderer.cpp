@@ -9,10 +9,13 @@
 #include "core/Camera2D.hpp"
 #include "sim/Components.hpp"
 #include "sim/components/SensorComponent.hpp"
+#include "sim/components/DetectionComponent.hpp"
 #include "sim/components/TransformComponent.hpp"
 #include "sim/components/VehicleComponent.hpp"
 #include "sim/World.hpp"
 #include "sim/damage/DamageComponent.hpp"
+#include "sim/ai/TankAIComponent.hpp"
+#include "sim/components/CollisionComponent.hpp"
 
 namespace clf::render {
 
@@ -61,6 +64,30 @@ void DrawRay(SDL_Renderer* renderer, const glm::vec2& aPx, const glm::vec2& bPx,
     SDL_RenderLine(renderer, aPx.x, aPx.y, bPx.x, bPx.y);
 }
 
+void DrawStateMarker(SDL_Renderer* renderer, const glm::vec2& pPx, float yOffsetPx, const SDL_Color& c)
+{
+    SDL_FRect r{pPx.x - 5.0f, pPx.y - yOffsetPx - 5.0f, 10.0f, 10.0f};
+    SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
+    SDL_RenderFillRect(renderer, &r);
+}
+
+SDL_Color ColorForState(sim::ai::TankAIState s, std::uint8_t alpha)
+{
+    switch (s) {
+        case sim::ai::TankAIState::AimAtTarget: return SDL_Color{255, 210, 80, alpha};
+        case sim::ai::TankAIState::Reposition: return SDL_Color{255, 160, 80, alpha};
+        case sim::ai::TankAIState::Disabled: return SDL_Color{160, 160, 160, alpha};
+        case sim::ai::TankAIState::Destroyed: return SDL_Color{255, 80, 80, alpha};
+        case sim::ai::TankAIState::SearchSelectWaypoint:
+        case sim::ai::TankAIState::MoveToWaypoint:
+        case sim::ai::TankAIState::ScanWhileMoving:
+        case sim::ai::TankAIState::Search:
+            return SDL_Color{120, 255, 120, alpha};
+        default:
+            return SDL_Color{200, 200, 255, alpha};
+    }
+}
+
 } // namespace
 
 DebugOverlayRenderer::DebugOverlayRenderer(SDL_Renderer* renderer)
@@ -96,6 +123,74 @@ void DebugOverlayRenderer::Render(const sim::World& world,
     }
 
     const auto& registry = world.Registry();
+
+    // Global AI debug overlays.
+    if (options.showSearchWaypoints || options.showMovementVectors || options.showCollisionBounds || options.showAiState || options.showDetectionDebug) {
+        auto v = registry.view<const sim::Transform, const sim::Tank, const sim::ai::TankAI>();
+        const float ppm = static_cast<float>(camera.ZoomPixelsPerMeter());
+
+        for (const auto e : v) {
+            const auto& xf = v.get<const sim::Transform>(e);
+            const auto& tank = v.get<const sim::Tank>(e);
+            const auto& ai = v.get<const sim::ai::TankAI>(e);
+            const glm::vec2 pPx = camera.WorldToScreenPx(xf.position_m, viewportW, viewportH);
+
+            const bool isSelected = (e == selectedEntity);
+            const std::uint8_t alpha = isSelected ? 220 : 110;
+            const float yOffset = std::max(14.0f, static_cast<float>(tank.radius_m) * ppm * 1.1f);
+
+            if (options.showAiState) {
+                DrawStateMarker(m_renderer, pPx, yOffset, ColorForState(ai.state, 200));
+            }
+
+            if (options.showDetectionDebug) {
+                if (const auto* det = registry.try_get<sim::Detection>(e)) {
+                    if (det->memory_remaining_s > 0.0) {
+                        const glm::vec2 lkPx = camera.WorldToScreenPx(det->last_known_target_pos_m, viewportW, viewportH);
+                        DrawRay(m_renderer, pPx, lkPx, 200, 160, 255, alpha);
+                        DrawCross(m_renderer, lkPx, 7.0f, 200, 160, 255, 220);
+                    }
+                }
+            }
+
+            if (options.showSearchWaypoints && ai.has_waypoint) {
+                const glm::vec2 wPx = camera.WorldToScreenPx(ai.search_waypoint_m, viewportW, viewportH);
+                SetDrawColor(m_renderer, 140, 220, 140, alpha);
+                SDL_RenderLine(m_renderer, pPx.x, pPx.y, wPx.x, wPx.y);
+                DrawCross(m_renderer, wPx, 6.0f, 140, 220, 140, 220);
+            }
+
+            if (options.showMovementVectors) {
+                // Hull forward vector.
+                const glm::dvec2 f{std::cos(xf.hull_heading_rad), std::sin(xf.hull_heading_rad)};
+                const glm::dvec2 tip = xf.position_m + f * 30.0;
+                const glm::vec2 tipPx = camera.WorldToScreenPx(tip, viewportW, viewportH);
+                DrawRay(m_renderer, pPx, tipPx, 200, 200, 255, alpha);
+
+                // Turret direction if present.
+                if (const auto* veh = registry.try_get<sim::Vehicle>(e)) {
+                    const glm::dvec2 tf{std::cos(veh->turret_heading_rad), std::sin(veh->turret_heading_rad)};
+                    const glm::dvec2 ttip = xf.position_m + tf * 26.0;
+                    const glm::vec2 ttipPx = camera.WorldToScreenPx(ttip, viewportW, viewportH);
+                    DrawRay(m_renderer, pPx, ttipPx, 255, 180, 120, alpha);
+
+                    // Velocity vector hint (forward speed).
+                    const double len_m = std::clamp(veh->speed_mps, 0.0, 25.0) * 12.0;
+                    if (len_m > 1.0) {
+                        const glm::dvec2 vtip = xf.position_m + f * len_m;
+                        const glm::vec2 vtipPx = camera.WorldToScreenPx(vtip, viewportW, viewportH);
+                        DrawRay(m_renderer, pPx, vtipPx, 120, 255, 180, alpha);
+                    }
+                }
+            }
+
+            if (options.showCollisionBounds) {
+                const float rPx = std::max(2.0f, static_cast<float>(tank.radius_m) * ppm);
+                DrawCircle(m_renderer, pPx, rPx, 220, 220, 220, alpha);
+            }
+        }
+    }
+
     if (selectedEntity != entt::null &&
         registry.valid(selectedEntity) &&
         registry.all_of<sim::Tank, sim::Transform>(selectedEntity)) {

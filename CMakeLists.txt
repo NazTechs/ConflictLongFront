@@ -11,22 +11,28 @@ add_executable(ConflictLongFront
     src/core/Application.cpp
     src/core/Time.cpp
     src/core/Camera2D.cpp
+    src/core/AppSettings.cpp
+    src/core/SettingsManager.cpp
     src/sim/World.cpp
     src/sim/terrain/Terrain.cpp
     src/sim/LineOfSight.cpp
     src/sim/DetectionSystem.cpp
     src/sim/WeaponSystem.cpp
     src/sim/ScenarioManager.cpp
+    src/sim/ai/AiSettings.cpp
     src/sim/ai/TankAISystem.cpp
     src/sim/physics/MovementSystem.cpp
     src/sim/physics/CollisionSystem.cpp
     src/sim/weapons/CombatLog.cpp
     src/sim/damage/PenetrationModel.cpp
     src/sim/damage/DamageModel.cpp
+    src/sim/visibility/VisibilityMask.cpp
+    src/sim/visibility/FogOfWarSystem.cpp
     src/render/Renderer2D.cpp
     src/render/TerrainRenderer.cpp
     src/render/DebugOverlayRenderer.cpp
     src/render/CameraController.cpp
+    src/render/FogOfWarRenderer.cpp
     src/ui/BattleControlPanel.cpp
     src/ui/ViewControlPanel.cpp
     src/ui/SelectedUnitPanel.cpp

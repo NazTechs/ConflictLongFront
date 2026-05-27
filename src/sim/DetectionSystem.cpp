@@ -44,6 +44,11 @@ double RequiredDetectTime(const Sensor& s, double dist_m)
 
 void UpdateDetection(entt::registry& registry, const terrain::Terrain& terrain, double dtSeconds)
 {
+    UpdateDetection(registry, terrain, dtSeconds, 6.0);
+}
+
+void UpdateDetection(entt::registry& registry, const terrain::Terrain& terrain, double dtSeconds, double memoryTimeoutSeconds)
+{
     auto sensors = registry.view<const Tank, const Transform, const Vehicle, const Sensor, Detection>();
     auto targets = registry.view<const Tank, const Transform>();
 
@@ -132,7 +137,7 @@ void UpdateDetection(entt::registry& registry, const terrain::Terrain& terrain, 
             det.detect_progress_s = std::min(det.required_detect_s, det.detect_progress_s + dtSeconds);
             if (det.detect_progress_s >= det.required_detect_s && det.current_target != entt::null) {
                 det.target_detected = true;
-                det.memory_remaining_s = 6.0;
+                det.memory_remaining_s = std::max(0.0, memoryTimeoutSeconds);
                 det.last_known_target_pos_m = registry.get<const Transform>(det.current_target).position_m;
             }
         } else {

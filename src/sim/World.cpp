@@ -46,9 +46,11 @@ bool World::LoadData(const std::filesystem::path& dataDir)
 {
     const auto weaponsPath = dataDir / "weapons.json";
     const auto unitsPath = dataDir / "units.json";
+    const auto aiPath = dataDir / "config" / "ai_settings.json";
 
     ClearSimState();
     m_units.clear();
+    m_aiSettings = ai::LoadAiSettingsOrDefaults(aiPath);
 
     if (!LoadWeapons(weaponsPath)) {
         return false;
@@ -63,6 +65,7 @@ void World::LoadFallbackSample()
 {
     ClearSimState();
     m_units.clear();
+    m_aiSettings = ai::AiSettings{};
 
     WeaponDef mbt120{};
     mbt120.projectile_name = "APFSDS";
@@ -181,8 +184,8 @@ void World::RandomizeTankPositions(std::uint32_t seed)
 
 void World::Step(double dtSeconds)
 {
-    UpdateDetection(m_registry, m_terrain, dtSeconds);
-    ai::UpdateTankAI(m_registry, m_terrain, dtSeconds, m_seed);
+    UpdateDetection(m_registry, m_terrain, dtSeconds, m_aiSettings.search.last_known_position_timeout_s);
+    ai::UpdateTankAI(m_registry, m_terrain, dtSeconds, m_seed, m_aiSettings);
 
     physics::UpdateMovement(m_registry, dtSeconds);
     physics::ResolveCollisions(m_registry);
@@ -239,6 +242,11 @@ const std::vector<DebugLine>& World::DebugLines() const
 const weapons::CombatLog& World::GetCombatLog() const
 {
     return m_combatLog;
+}
+
+const ai::AiSettings& World::GetAiSettings() const
+{
+    return m_aiSettings;
 }
 
 bool World::LoadWeapons(const std::filesystem::path& filePath)

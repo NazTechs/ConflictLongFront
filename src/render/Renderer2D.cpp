@@ -13,6 +13,7 @@ namespace clf::render {
 Renderer2D::Renderer2D(SDL_Renderer* renderer)
     : m_renderer(renderer),
       m_terrainRenderer(renderer),
+      m_fogRenderer(renderer),
       m_debugOverlayRenderer(renderer)
 {
 }
@@ -20,6 +21,10 @@ Renderer2D::Renderer2D(SDL_Renderer* renderer)
 void Renderer2D::Render(const sim::World& world, const core::Camera2D& camera, int viewportW, int viewportH, const Options& options)
 {
     m_terrainRenderer.Render(world.GetTerrain(), camera, viewportW, viewportH, options.terrain);
+
+    if (options.fog.enabled && options.fogMask) {
+        m_fogRenderer.Render(*options.fogMask, camera, viewportW, viewportH, options.fog);
+    }
 
     const auto& registry = world.Registry();
     const auto view = registry.view<const sim::Tank, const sim::Transform>();

@@ -5,6 +5,7 @@ struct SDL_Renderer;
 #include <entt/entity/entity.hpp>
 
 #include "render/DebugOverlayRenderer.hpp"
+#include "render/FogOfWarRenderer.hpp"
 #include "render/TerrainRenderer.hpp"
 #include "render/ViewMode.hpp"
 
@@ -14,6 +15,9 @@ class Camera2D;
 
 namespace clf::sim {
 class World;
+namespace visibility {
+class VisibilityMask;
+}
 }
 
 namespace clf::render {
@@ -30,6 +34,8 @@ public:
         bool showAllUnitsInDebugView = true;
         TerrainRenderOptions terrain;
         DebugOverlayOptions overlay;
+        FogOfWarRenderOptions fog;
+        sim::visibility::VisibilityMask* fogMask = nullptr;
     };
 
     void Render(const sim::World& world, const core::Camera2D& camera, int viewportW, int viewportH, const Options& options);
@@ -37,6 +43,7 @@ public:
 private:
     SDL_Renderer* m_renderer = nullptr;
     TerrainRenderer m_terrainRenderer;
+    FogOfWarRenderer m_fogRenderer;
     DebugOverlayRenderer m_debugOverlayRenderer;
 };
 

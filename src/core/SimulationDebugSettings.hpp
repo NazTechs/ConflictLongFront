@@ -19,6 +19,13 @@ struct SimulationDebugSettings final {
     bool highlightSelection = true;
 
     bool showDamageZones = false;
+
+    bool showFogOfWar = true;
+    bool showSearchWaypoints = true;
+    bool showMovementVectors = true;
+    bool showAiState = true;
+    bool showDetectionDebug = false;
+    bool showCollisionBounds = false;
 };
 
 } // namespace clf::core
