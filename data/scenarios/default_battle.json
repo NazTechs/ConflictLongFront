@@ -1,0 +1,14 @@
+{
+  "name": "Default Battle",
+  "world_size_m": [20000.0, 20000.0],
+  "terrain": {
+    "seed": 1337,
+    "cell_size_m": 20.0
+  },
+  "units_source": {
+    "units_json": "data/units.json",
+    "weapons_json": "data/weapons.json"
+  },
+  "notes": "Prototype scenario file (not fully wired yet). Restart/Randomize are driven from the GUI."
+}
+

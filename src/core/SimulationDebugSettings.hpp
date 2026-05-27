@@ -3,9 +3,13 @@
 namespace clf::core {
 
 struct SimulationDebugSettings final {
+    bool showAllUnitsInDebugView = true;
+    bool showOnlyDetectedUnitsInUnitView = true;
+
     bool showWeaponRange = true;
     bool showVisualRange = true;
     bool showLosRay = true;
+    bool showSensorCone = true;
 
     bool showTerrainHeightOverlay = true;
     bool terrainContourBands = true;
@@ -13,7 +17,8 @@ struct SimulationDebugSettings final {
     bool showBlockedLosPoint = true;
     bool showShotTraces = true;
     bool highlightSelection = true;
+
+    bool showDamageZones = false;
 };
 
 } // namespace clf::core
-

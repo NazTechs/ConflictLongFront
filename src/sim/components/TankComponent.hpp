@@ -2,15 +2,9 @@
 
 #include <string>
 
-#include <glm/vec2.hpp>
-
 namespace clf::sim {
 
 struct Tank final {
-    glm::dvec2 position_m{0.0, 0.0};
-    glm::dvec2 velocity_mps{0.0, 0.0};
-    double heading_rad = 0.0;
-
     int team_id = 0;
     double health = 100.0;
 
@@ -29,4 +23,3 @@ struct UnitName final {
 };
 
 } // namespace clf::sim
-

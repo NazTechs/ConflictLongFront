@@ -3,16 +3,28 @@
     "mbt_120mm": {
       "projectile": "APFSDS",
       "max_range_m": 3500.0,
+      "max_effective_range_m": 3500.0,
       "muzzle_velocity_mps": 1650.0,
       "reload_time_s": 6.0,
-      "ammo": 18
+      "ammo": 18,
+      "dispersion_mrad": 0.8,
+      "penetration_at_0m_mm": 700.0,
+      "penetration_at_1000m_mm": 650.0,
+      "penetration_at_2000m_mm": 560.0,
+      "penetration_at_3000m_mm": 480.0
     },
     "mbt_105mm": {
       "projectile": "APFSDS",
       "max_range_m": 2500.0,
+      "max_effective_range_m": 2500.0,
       "muzzle_velocity_mps": 1475.0,
       "reload_time_s": 7.0,
-      "ammo": 20
+      "ammo": 20,
+      "dispersion_mrad": 1.1,
+      "penetration_at_0m_mm": 520.0,
+      "penetration_at_1000m_mm": 480.0,
+      "penetration_at_2000m_mm": 400.0,
+      "penetration_at_3000m_mm": 330.0
     }
   }
 }

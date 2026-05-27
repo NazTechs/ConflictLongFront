@@ -4,6 +4,8 @@
 
 #include "core/Camera2D.hpp"
 #include "sim/Components.hpp"
+#include "sim/components/DetectionComponent.hpp"
+#include "sim/components/TransformComponent.hpp"
 #include "sim/World.hpp"
 
 namespace clf::render {
@@ -20,13 +22,45 @@ void Renderer2D::Render(const sim::World& world, const core::Camera2D& camera, i
     m_terrainRenderer.Render(world.GetTerrain(), camera, viewportW, viewportH, options.terrain);
 
     const auto& registry = world.Registry();
-    const auto view = registry.view<const sim::Tank>();
+    const auto view = registry.view<const sim::Tank, const sim::Transform>();
 
     const float ppm = static_cast<float>(camera.ZoomPixelsPerMeter());
 
+    auto isVisibleInMode = [&](entt::entity entity) -> bool {
+        if (options.viewMode == ViewMode::Spectator) {
+            return true;
+        }
+        if (options.viewMode == ViewMode::DebugTactical) {
+            if (options.showAllUnitsInDebugView) {
+                return true;
+            }
+            // If not omniscient, fall through to detection-based filter using viewerEntity.
+        }
+
+        if (options.viewerEntity == entt::null || !registry.valid(options.viewerEntity)) {
+            return true;
+        }
+        if (entity == options.viewerEntity) {
+            return true;
+        }
+        if (!options.showOnlyDetectedUnits) {
+            return true;
+        }
+
+        const auto* det = registry.try_get<sim::Detection>(options.viewerEntity);
+        if (!det) {
+            return true;
+        }
+        return det->target_detected && det->current_target == entity;
+    };
+
     for (const auto entity : view) {
+        if (!isVisibleInMode(entity)) {
+            continue;
+        }
         const auto& tank = view.get<const sim::Tank>(entity);
-        const glm::vec2 p = camera.WorldToScreenPx(tank.position_m, viewportW, viewportH);
+        const auto& xf = view.get<const sim::Transform>(entity);
+        const glm::vec2 p = camera.WorldToScreenPx(xf.position_m, viewportW, viewportH);
 
         if (tank.team_id == 0) {
             SDL_SetRenderDrawColor(m_renderer, 80, 160, 255, 255);

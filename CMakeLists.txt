@@ -14,12 +14,23 @@ add_executable(ConflictLongFront
     src/sim/World.cpp
     src/sim/terrain/Terrain.cpp
     src/sim/LineOfSight.cpp
+    src/sim/DetectionSystem.cpp
     src/sim/WeaponSystem.cpp
-    src/sim/Systems.cpp
+    src/sim/ScenarioManager.cpp
+    src/sim/ai/TankAISystem.cpp
+    src/sim/physics/MovementSystem.cpp
+    src/sim/physics/CollisionSystem.cpp
+    src/sim/weapons/CombatLog.cpp
+    src/sim/damage/PenetrationModel.cpp
+    src/sim/damage/DamageModel.cpp
     src/render/Renderer2D.cpp
     src/render/TerrainRenderer.cpp
     src/render/DebugOverlayRenderer.cpp
-    src/ui/SimulationDebugPanel.cpp
+    src/render/CameraController.cpp
+    src/ui/BattleControlPanel.cpp
+    src/ui/ViewControlPanel.cpp
+    src/ui/SelectedUnitPanel.cpp
+    src/ui/CombatLogPanel.cpp
 )
 
 target_include_directories(ConflictLongFront PRIVATE src)

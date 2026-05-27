@@ -15,10 +15,15 @@
 
 #include "core/Camera2D.hpp"
 #include "core/Time.hpp"
+#include "render/CameraController.hpp"
 #include "render/Renderer2D.hpp"
 #include "sim/Components.hpp"
+#include "sim/ScenarioManager.hpp"
 #include "sim/World.hpp"
-#include "ui/SimulationDebugPanel.hpp"
+#include "ui/BattleControlPanel.hpp"
+#include "ui/CombatLogPanel.hpp"
+#include "ui/SelectedUnitPanel.hpp"
+#include "ui/ViewControlPanel.hpp"
 
 namespace clf::core {
 
@@ -53,14 +58,25 @@ int Application::Run()
     m_time = std::make_unique<Time>();
     m_camera = std::make_unique<Camera2D>();
     m_world = std::make_unique<sim::World>();
+    m_scenarioManager = std::make_unique<sim::ScenarioManager>(*m_world);
     m_renderer2D = std::make_unique<render::Renderer2D>(m_renderer);
-    m_debugUI = std::make_unique<ui::SimulationDebugPanel>();
+    m_cameraController = std::make_unique<render::CameraController>();
+
+    m_battleControlPanel = std::make_unique<ui::BattleControlPanel>();
+    m_viewControlPanel = std::make_unique<ui::ViewControlPanel>();
+    m_selectedUnitPanel = std::make_unique<ui::SelectedUnitPanel>();
+    m_combatLogPanel = std::make_unique<ui::CombatLogPanel>();
 
     const auto dataDir = ResolveDataDir();
     if (!m_world->LoadData(dataDir)) {
         spdlog::warn("Failed to load JSON from '{}', using fallback sample data.", dataDir.string());
         m_world->LoadFallbackSample();
     }
+    // Default start: also apply seed-based terrain generation via restart so UI restart is consistent.
+    sim::ScenarioSettings initial{};
+    initial.seed = 1337;
+    initial.randomizePositions = false;
+    m_scenarioManager->Restart(initial);
 
     m_running = true;
     m_simAccumulatorSeconds = 0.0;
@@ -70,10 +86,11 @@ int Application::Run()
         m_time->Tick();
         ProcessEvents();
 
-        const double frameDt = std::min(m_time->DeltaSeconds(), 0.25);
-        UpdateCamera(frameDt);
+        const double rawFrameDt = std::min(m_time->DeltaSeconds(), 0.25);
+        UpdateCamera(rawFrameDt);
 
-        m_simAccumulatorSeconds += frameDt;
+        const double scaledDt = m_paused ? 0.0 : rawFrameDt * m_simSpeed;
+        m_simAccumulatorSeconds += scaledDt;
         while (m_simAccumulatorSeconds >= kFixedSimDtSeconds) {
             StepSimulationFixed(kFixedSimDtSeconds);
             m_simAccumulatorSeconds -= kFixedSimDtSeconds;
@@ -187,7 +204,9 @@ void Application::ProcessEvents()
             m_rightMouseDown = false;
         }
         if (event.type == SDL_EVENT_MOUSE_MOTION && m_rightMouseDown) {
-            m_camera->PanPixels(static_cast<double>(-event.motion.xrel), static_cast<double>(-event.motion.yrel));
+            if (m_viewMode == render::ViewMode::Spectator || m_viewMode == render::ViewMode::DebugTactical) {
+                m_camera->PanPixels(static_cast<double>(-event.motion.xrel), static_cast<double>(-event.motion.yrel));
+            }
         }
 
         if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_ESCAPE) {
@@ -200,8 +219,16 @@ void Application::ProcessEvents()
 void Application::UpdateCamera(double frameDtSeconds)
 {
     ImGuiIO& io = ImGui::GetIO();
+    if (m_cameraController) {
+        m_cameraController->ApplyViewMode(*m_camera, *m_world, m_selectedEntity);
+    }
+
     if (io.WantCaptureKeyboard) {
         return;
+    }
+
+    if (!(m_viewMode == render::ViewMode::Spectator || m_viewMode == render::ViewMode::DebugTactical)) {
+        return; // unit views are camera-locked for now
     }
 
     int numKeys = 0;
@@ -250,13 +277,14 @@ void Application::SelectEntityAtScreen(float xPx, float yPx)
     double bestDist2 = std::numeric_limits<double>::infinity();
 
     auto& registry = m_world->Registry();
-    const auto view = registry.view<const sim::Tank>();
+    const auto view = registry.view<const sim::Tank, const sim::Transform>();
 
     const double minPickPx = 8.0;
     const double zoom = std::max(1e-6, m_camera->ZoomPixelsPerMeter());
     for (const auto e : view) {
         const auto& tank = view.get<const sim::Tank>(e);
-        const glm::dvec2 d = tank.position_m - worldPos;
+        const auto& xf = view.get<const sim::Transform>(e);
+        const glm::dvec2 d = xf.position_m - worldPos;
         const double dist2 = d.x * d.x + d.y * d.y;
 
         const double pickRadius_m = std::max(tank.radius_m, minPickPx / zoom);
@@ -285,12 +313,33 @@ void Application::RenderFrame()
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 
-    ui::SimulationDebugPanelState state{};
-    state.fps = static_cast<float>(m_time->FPS());
-    state.unitCount = static_cast<int>(m_world->UnitCount());
-    state.simTimeSeconds = m_world->SimulationTimeSeconds();
-    state.zoomPixelsPerMeter = m_camera->ZoomPixelsPerMeter();
-    m_debugUI->Render(state, m_debugSettings, m_selectedEntity, *m_world);
+    // Panels
+    if (m_battleControlPanel && m_scenarioManager) {
+        // Persist state across frames (static is fine for now; later move to a UI state object).
+        static ui::BattleControlState s_state{};
+        s_state.paused = m_paused;
+        s_state.simSpeed = static_cast<float>(m_simSpeed);
+        if (m_battleControlPanel->Render(s_state, *m_scenarioManager)) {
+            m_selectedEntity = entt::null;
+        }
+        m_paused = s_state.paused;
+        m_simSpeed = static_cast<double>(s_state.simSpeed);
+    }
+
+    if (m_viewControlPanel && m_cameraController) {
+        static ui::ViewControlState s_view{};
+        m_viewControlPanel->Render(s_view, m_debugSettings);
+        m_viewMode = s_view.viewMode;
+        m_cameraController->SetViewMode(s_view.viewMode);
+    }
+
+    if (m_selectedUnitPanel) {
+        m_selectedUnitPanel->Render(m_selectedEntity, *m_world);
+    }
+
+    if (m_combatLogPanel) {
+        m_combatLogPanel->Render(*m_world);
+    }
 
     ImGui::Render();
 
@@ -299,14 +348,37 @@ void Application::RenderFrame()
 
     render::Renderer2D::Options renderOptions{};
     renderOptions.selectedEntity = m_selectedEntity;
+    renderOptions.viewMode = m_viewMode;
+    renderOptions.showOnlyDetectedUnits = m_debugSettings.showOnlyDetectedUnitsInUnitView;
+    renderOptions.showAllUnitsInDebugView = m_debugSettings.showAllUnitsInDebugView;
+
+    // Viewer entity for realistic unit views.
+    if (m_viewMode == render::ViewMode::SelectedTank) {
+        renderOptions.viewerEntity = m_selectedEntity;
+    } else if (m_viewMode == render::ViewMode::BlueTank || m_viewMode == render::ViewMode::RedTank) {
+        // Find the team tank.
+        const int team = (m_viewMode == render::ViewMode::BlueTank) ? 0 : 1;
+        auto view = m_world->Registry().view<const sim::Tank>();
+        for (const auto e : view) {
+            if (view.get<const sim::Tank>(e).team_id == team) {
+                renderOptions.viewerEntity = e;
+                break;
+            }
+        }
+    }
+    if (m_viewMode == render::ViewMode::DebugTactical && !m_debugSettings.showAllUnitsInDebugView) {
+        renderOptions.viewerEntity = (m_selectedEntity != entt::null) ? m_selectedEntity : renderOptions.viewerEntity;
+    }
     renderOptions.terrain.showHeightOverlay = m_debugSettings.showTerrainHeightOverlay;
     renderOptions.terrain.contourBands = m_debugSettings.terrainContourBands;
     renderOptions.overlay.showWeaponRange = m_debugSettings.showWeaponRange;
     renderOptions.overlay.showVisualRange = m_debugSettings.showVisualRange;
     renderOptions.overlay.showLosRay = m_debugSettings.showLosRay;
+    renderOptions.overlay.showSensorCone = m_debugSettings.showSensorCone;
     renderOptions.overlay.showBlockedPoint = m_debugSettings.showBlockedLosPoint;
     renderOptions.overlay.showShotTraces = m_debugSettings.showShotTraces;
     renderOptions.overlay.highlightSelection = m_debugSettings.highlightSelection;
+    renderOptions.overlay.showDamageZones = m_debugSettings.showDamageZones;
     m_renderer2D->Render(*m_world, *m_camera, w, h, renderOptions);
 
     ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), m_renderer);

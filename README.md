@@ -50,38 +50,50 @@ The build copies `data/` next to the executable automatically.
 
 ## Controls (demo)
 
-- WASD / Arrow keys: pan camera
+- WASD / Arrow keys: pan camera (Spectator/Debug view)
 - Mouse wheel: zoom
-- Right mouse drag: pan camera
+- Right mouse drag: pan camera (Spectator/Debug view)
 - Left click: select tank
 - Esc: quit
 
 ## Data files (demo)
 
 - `data/weapons.json`:
-  - `projectile`, `max_range_m`, `muzzle_velocity_mps`, `reload_time_s`, `ammo`
+  - `projectile`, `max_range_m`, `max_effective_range_m`, `muzzle_velocity_mps`, `reload_time_s`, `ammo`
+  - `dispersion_mrad`, `penetration_at_0m_mm`, `penetration_at_1000m_mm`, `penetration_at_2000m_mm`, `penetration_at_3000m_mm`
 - `data/units.json`:
   - `name`, `team_id`, `position_m`, `velocity_mps`, `radius_m`, `sensor_height_m`, `visual_range_m`, `weapon`
+- `data/scenarios/default_battle.json`:
+  - prototype scenario metadata (not fully wired yet)
 
 ## Current demo behavior
 
 - 20 km x 20 km world (meters)
 - Procedural terrain height grid (hills/valleys + a central ridge) with height shading/contours
-- Two tanks (Red and Blue) spawned from `data/units.json`
-- Direct-fire gun model with ammo + reload from `data/weapons.json`
-- Terrain-aware line-of-sight (LOS) sampling between tanks
-- Deterministic firing when: in weapon range + LOS clear + ammo > 0 + reload ready
-- Debug overlays for selected tank:
-  - weapon range circle
-  - visual range circle
-  - LOS ray (green = clear, red = blocked) + blocked point marker
-  - shot traces when firing
-- ImGui panel shows FPS/unit count/sim time/zoom and selection + overlay toggles
+- Two tanks (Red and Blue) spawned from `data/units.json` (seeded terrain)
+- Fixed-timestep simulation; rendering can be variable-rate
+- Vehicle movement model (speed/turn rates) + circle collision separation
+- Sensor detection model with range + FOV + terrain LOS + detection time (no omniscient targeting)
+- Simple “search and destroy” AI: patrol/search, scan, detect, aim, fire, reposition
+- Direct-fire ballistics prototype:
+  - dispersion-based hit/miss
+  - penetration vs. range (simple curve)
+  - component-based damage state (mobility/firepower/optics/engine/ammo) with “destroyed” outcomes
+- View modes (ImGui -> `View` panel):
+  - Spectator / Red Tank / Blue Tank / Selected Unit / Debug Tactical
+  - In unit views, enemies are rendered only when detected (optional)
+- UI panels:
+  - `Battle Control`: pause, sim speed, seed, restart/randomize
+  - `View`: view mode + overlay toggles
+  - `Selected Unit`: live sensor/weapon/engagement/damage state
+  - `Combat Log`: recent shot events and results
 
 ## Next steps (suggested)
 
 - Unit orders (move/attack/hold)
 - Pathfinding over terrain
-- Hit/damage + later armor/penetration
-- Scenario loader
+- Expand tank types + scenario loader (JSON-driven)
+- Better LOS/visibility metrics and “sensor cone” visualization
+- More realistic damage zones (no HP) and armor/angle modeling
+- Ballistic flight time + lead + stabilization
 - Deterministic replay / lockstep mode

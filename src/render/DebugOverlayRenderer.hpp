@@ -20,9 +20,11 @@ struct DebugOverlayOptions final {
     bool showWeaponRange = true;
     bool showVisualRange = true;
     bool showLosRay = true;
+    bool showSensorCone = true;
     bool showBlockedPoint = true;
     bool showShotTraces = true;
     bool highlightSelection = true;
+    bool showDamageZones = false;
 };
 
 class DebugOverlayRenderer final {
@@ -41,4 +43,3 @@ private:
 };
 
 } // namespace clf::render
-

@@ -6,6 +6,7 @@ struct SDL_Renderer;
 
 #include "render/DebugOverlayRenderer.hpp"
 #include "render/TerrainRenderer.hpp"
+#include "render/ViewMode.hpp"
 
 namespace clf::core {
 class Camera2D;
@@ -23,6 +24,10 @@ public:
 
     struct Options final {
         entt::entity selectedEntity = entt::null;
+        ViewMode viewMode = ViewMode::Spectator;
+        entt::entity viewerEntity = entt::null; // for realistic visibility filtering
+        bool showOnlyDetectedUnits = true;
+        bool showAllUnitsInDebugView = true;
         TerrainRenderOptions terrain;
         DebugOverlayOptions overlay;
     };
