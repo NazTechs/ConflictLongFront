@@ -9,6 +9,7 @@ public:
     Camera2D();
 
     glm::vec2 WorldToScreenPx(const glm::dvec2& worldPosMeters, int viewportW, int viewportH) const;
+    glm::dvec2 ScreenToWorldMeters(const glm::vec2& screenPx, int viewportW, int viewportH) const;
 
     void PanMeters(double dxMeters, double dyMeters);
     void PanPixels(double dxPixels, double dyPixels);
@@ -20,8 +21,7 @@ public:
 
 private:
     glm::dvec2 m_positionMeters{0.0, 0.0}; // world-space center
-    double m_zoomPixelsPerMeter = 20.0;    // pixels per meter
+    double m_zoomPixelsPerMeter = 0.06;    // pixels per meter
 };
 
 } // namespace clf::core
-

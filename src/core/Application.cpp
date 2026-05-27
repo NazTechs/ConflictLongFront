@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <string>
 
 #include <SDL3/SDL.h>
@@ -15,8 +16,9 @@
 #include "core/Camera2D.hpp"
 #include "core/Time.hpp"
 #include "render/Renderer2D.hpp"
+#include "sim/Components.hpp"
 #include "sim/World.hpp"
-#include "ui/DebugUI.hpp"
+#include "ui/SimulationDebugPanel.hpp"
 
 namespace clf::core {
 
@@ -52,7 +54,7 @@ int Application::Run()
     m_camera = std::make_unique<Camera2D>();
     m_world = std::make_unique<sim::World>();
     m_renderer2D = std::make_unique<render::Renderer2D>(m_renderer);
-    m_debugUI = std::make_unique<ui::DebugUI>();
+    m_debugUI = std::make_unique<ui::SimulationDebugPanel>();
 
     const auto dataDir = ResolveDataDir();
     if (!m_world->LoadData(dataDir)) {
@@ -160,6 +162,9 @@ void Application::ProcessEvents()
             return;
         }
 
+        // Convert mouse coordinates to renderer pixel coordinates (HiDPI-aware).
+        SDL_ConvertEventToRenderCoordinates(m_renderer, &event);
+
         ImGuiIO& io = ImGui::GetIO();
         if (io.WantCaptureMouse || io.WantCaptureKeyboard) {
             continue;
@@ -169,6 +174,10 @@ void Application::ProcessEvents()
             const float y = event.wheel.y;
             const double factor = std::pow(1.1, static_cast<double>(y));
             m_camera->MultiplyZoom(factor);
+        }
+
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT) {
+            SelectEntityAtScreen(event.button.x, event.button.y);
         }
 
         if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_RIGHT) {
@@ -222,6 +231,44 @@ void Application::UpdateCamera(double frameDtSeconds)
     }
 }
 
+void Application::SelectEntityAtScreen(float xPx, float yPx)
+{
+    if (!m_world || !m_camera) {
+        return;
+    }
+
+    int w = 0;
+    int h = 0;
+    SDL_GetWindowSizeInPixels(m_window, &w, &h);
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+
+    const glm::dvec2 worldPos = m_camera->ScreenToWorldMeters(glm::vec2(xPx, yPx), w, h);
+
+    entt::entity best = entt::null;
+    double bestDist2 = std::numeric_limits<double>::infinity();
+
+    auto& registry = m_world->Registry();
+    const auto view = registry.view<const sim::Tank>();
+
+    const double minPickPx = 8.0;
+    const double zoom = std::max(1e-6, m_camera->ZoomPixelsPerMeter());
+    for (const auto e : view) {
+        const auto& tank = view.get<const sim::Tank>(e);
+        const glm::dvec2 d = tank.position_m - worldPos;
+        const double dist2 = d.x * d.x + d.y * d.y;
+
+        const double pickRadius_m = std::max(tank.radius_m, minPickPx / zoom);
+        if (dist2 <= pickRadius_m * pickRadius_m && dist2 < bestDist2) {
+            best = e;
+            bestDist2 = dist2;
+        }
+    }
+
+    m_selectedEntity = best;
+}
+
 void Application::StepSimulationFixed(double dtSeconds)
 {
     m_world->Step(dtSeconds);
@@ -238,19 +285,29 @@ void Application::RenderFrame()
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 
-    ui::DebugUIState state{};
+    ui::SimulationDebugPanelState state{};
     state.fps = static_cast<float>(m_time->FPS());
     state.unitCount = static_cast<int>(m_world->UnitCount());
     state.simTimeSeconds = m_world->SimulationTimeSeconds();
     state.zoomPixelsPerMeter = m_camera->ZoomPixelsPerMeter();
-    m_debugUI->Render(state);
+    m_debugUI->Render(state, m_debugSettings, m_selectedEntity, *m_world);
 
     ImGui::Render();
 
     SDL_SetRenderDrawColorFloat(m_renderer, 0.08f, 0.08f, 0.10f, 1.0f);
     SDL_RenderClear(m_renderer);
 
-    m_renderer2D->Render(*m_world, *m_camera, w, h);
+    render::Renderer2D::Options renderOptions{};
+    renderOptions.selectedEntity = m_selectedEntity;
+    renderOptions.terrain.showHeightOverlay = m_debugSettings.showTerrainHeightOverlay;
+    renderOptions.terrain.contourBands = m_debugSettings.terrainContourBands;
+    renderOptions.overlay.showWeaponRange = m_debugSettings.showWeaponRange;
+    renderOptions.overlay.showVisualRange = m_debugSettings.showVisualRange;
+    renderOptions.overlay.showLosRay = m_debugSettings.showLosRay;
+    renderOptions.overlay.showBlockedPoint = m_debugSettings.showBlockedLosPoint;
+    renderOptions.overlay.showShotTraces = m_debugSettings.showShotTraces;
+    renderOptions.overlay.highlightSelection = m_debugSettings.highlightSelection;
+    m_renderer2D->Render(*m_world, *m_camera, w, h, renderOptions);
 
     ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), m_renderer);
     SDL_RenderPresent(m_renderer);

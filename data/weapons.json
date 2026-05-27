@@ -1,15 +1,18 @@
 {
   "weapons": {
-    "cannon_120mm": {
-      "range_m": 2500.0,
-      "reload_time_s": 4.0,
-      "projectile_speed_mps": 1200.0
+    "mbt_120mm": {
+      "projectile": "APFSDS",
+      "max_range_m": 3500.0,
+      "muzzle_velocity_mps": 1650.0,
+      "reload_time_s": 6.0,
+      "ammo": 18
     },
-    "cannon_105mm": {
-      "range_m": 1800.0,
-      "reload_time_s": 5.0,
-      "projectile_speed_mps": 1000.0
+    "mbt_105mm": {
+      "projectile": "APFSDS",
+      "max_range_m": 2500.0,
+      "muzzle_velocity_mps": 1475.0,
+      "reload_time_s": 7.0,
+      "ammo": 20
     }
   }
 }
-

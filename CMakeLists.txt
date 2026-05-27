@@ -12,9 +12,14 @@ add_executable(ConflictLongFront
     src/core/Time.cpp
     src/core/Camera2D.cpp
     src/sim/World.cpp
+    src/sim/terrain/Terrain.cpp
+    src/sim/LineOfSight.cpp
+    src/sim/WeaponSystem.cpp
     src/sim/Systems.cpp
     src/render/Renderer2D.cpp
-    src/ui/DebugUI.cpp
+    src/render/TerrainRenderer.cpp
+    src/render/DebugOverlayRenderer.cpp
+    src/ui/SimulationDebugPanel.cpp
 )
 
 target_include_directories(ConflictLongFront PRIVATE src)
@@ -55,4 +60,3 @@ if (WIN32)
         COMMAND_EXPAND_LISTS
     )
 endif()
-

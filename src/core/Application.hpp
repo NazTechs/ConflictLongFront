@@ -3,6 +3,10 @@
 #include <memory>
 #include <filesystem>
 
+#include <entt/entity/entity.hpp>
+
+#include "core/SimulationDebugSettings.hpp"
+
 struct SDL_Window;
 struct SDL_Renderer;
 
@@ -15,7 +19,7 @@ class World;
 }
 
 namespace clf::ui {
-class DebugUI;
+class SimulationDebugPanel;
 }
 
 namespace clf::core {
@@ -38,6 +42,7 @@ private:
 
     void ProcessEvents();
     void UpdateCamera(double frameDtSeconds);
+    void SelectEntityAtScreen(float xPx, float yPx);
     void StepSimulationFixed(double dtSeconds);
     void RenderFrame();
 
@@ -48,16 +53,17 @@ private:
     bool m_running = false;
 
     bool m_rightMouseDown = false;
+    entt::entity m_selectedEntity = entt::null;
+    SimulationDebugSettings m_debugSettings{};
 
     std::unique_ptr<Time> m_time;
     std::unique_ptr<Camera2D> m_camera;
     std::unique_ptr<sim::World> m_world;
     std::unique_ptr<render::Renderer2D> m_renderer2D;
-    std::unique_ptr<ui::DebugUI> m_debugUI;
+    std::unique_ptr<ui::SimulationDebugPanel> m_debugUI;
 
     double m_simAccumulatorSeconds = 0.0;
     double m_simTimeSeconds = 0.0;
 };
 
 } // namespace clf::core
-

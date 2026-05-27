@@ -53,20 +53,35 @@ The build copies `data/` next to the executable automatically.
 - WASD / Arrow keys: pan camera
 - Mouse wheel: zoom
 - Right mouse drag: pan camera
+- Left click: select tank
 - Esc: quit
+
+## Data files (demo)
+
+- `data/weapons.json`:
+  - `projectile`, `max_range_m`, `muzzle_velocity_mps`, `reload_time_s`, `ammo`
+- `data/units.json`:
+  - `name`, `team_id`, `position_m`, `velocity_mps`, `radius_m`, `sensor_height_m`, `visual_range_m`, `weapon`
 
 ## Current demo behavior
 
-- Loads `data/weapons.json` and `data/units.json`
-- Spawns a handful of tanks (ECS entities)
-- Runs a fixed-timestep simulation and integrates velocity in **m/s**
-- Draws tanks as simple rectangles
-- Shows a debug panel with FPS, unit count, simulation time, and zoom level
+- 20 km x 20 km world (meters)
+- Procedural terrain height grid (hills/valleys + a central ridge) with height shading/contours
+- Two tanks (Red and Blue) spawned from `data/units.json`
+- Direct-fire gun model with ammo + reload from `data/weapons.json`
+- Terrain-aware line-of-sight (LOS) sampling between tanks
+- Deterministic firing when: in weapon range + LOS clear + ammo > 0 + reload ready
+- Debug overlays for selected tank:
+  - weapon range circle
+  - visual range circle
+  - LOS ray (green = clear, red = blocked) + blocked point marker
+  - shot traces when firing
+- ImGui panel shows FPS/unit count/sim time/zoom and selection + overlay toggles
 
 ## Next steps (suggested)
 
-- Terrain grid + pathfinding
-- Order system (move/attack/hold)
-- Weapon firing and hit effects (still in meters/seconds)
+- Unit orders (move/attack/hold)
+- Pathfinding over terrain
+- Hit/damage + later armor/penetration
 - Scenario loader
 - Deterministic replay / lockstep mode

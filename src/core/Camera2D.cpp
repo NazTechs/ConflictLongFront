@@ -14,6 +14,17 @@ glm::vec2 Camera2D::WorldToScreenPx(const glm::dvec2& worldPosMeters, int viewpo
     return glm::vec2(static_cast<float>(x), static_cast<float>(y));
 }
 
+glm::dvec2 Camera2D::ScreenToWorldMeters(const glm::vec2& screenPx, int viewportW, int viewportH) const
+{
+    if (m_zoomPixelsPerMeter <= 0.0) {
+        return m_positionMeters;
+    }
+
+    const double x = (static_cast<double>(screenPx.x) - static_cast<double>(viewportW) * 0.5) / m_zoomPixelsPerMeter + m_positionMeters.x;
+    const double y = (static_cast<double>(screenPx.y) - static_cast<double>(viewportH) * 0.5) / m_zoomPixelsPerMeter + m_positionMeters.y;
+    return glm::dvec2(x, y);
+}
+
 void Camera2D::PanMeters(double dxMeters, double dyMeters)
 {
     m_positionMeters += glm::dvec2(dxMeters, dyMeters);
@@ -34,7 +45,7 @@ void Camera2D::MultiplyZoom(double factor)
     }
 
     m_zoomPixelsPerMeter *= factor;
-    m_zoomPixelsPerMeter = std::clamp(m_zoomPixelsPerMeter, 2.0, 400.0);
+    m_zoomPixelsPerMeter = std::clamp(m_zoomPixelsPerMeter, 0.02, 800.0);
 }
 
 double Camera2D::ZoomPixelsPerMeter() const
@@ -48,4 +59,3 @@ const glm::dvec2& Camera2D::PositionMeters() const
 }
 
 } // namespace clf::core
-
