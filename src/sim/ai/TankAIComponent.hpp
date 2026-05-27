@@ -36,6 +36,8 @@ struct TankAI final {
     // Stuck detection.
     glm::dvec2 last_pos_m{0.0, 0.0};
     double stuck_time_s = 0.0;
+
+    
 };
 
 } // namespace clf::sim::ai

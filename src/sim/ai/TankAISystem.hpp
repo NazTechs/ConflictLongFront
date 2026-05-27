@@ -12,6 +12,11 @@ class Terrain;
 
 namespace clf::sim::ai {
 
-void UpdateTankAI(entt::registry& registry, const terrain::Terrain& terrain, double dtSeconds, std::uint32_t seed, const AiSettings& settings);
+void UpdateTankAI(
+    entt::registry& registry,
+    const terrain::Terrain& terrain,
+    double dtSeconds,
+    std::uint32_t seed,
+    const AiSettings& settings);
 
 } // namespace clf::sim::ai
