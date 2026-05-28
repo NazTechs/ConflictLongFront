@@ -2,6 +2,8 @@
 
 #include <imgui.h>
 
+#include "core/Camera3D.hpp"
+
 namespace clf::ui {
 
 namespace {
@@ -20,9 +22,52 @@ const char* ViewModeLabel(clf::render::ViewMode mode)
 
 } // namespace
 
-void ViewControlPanel::Render(ViewControlState& inOutState, clf::core::SimulationDebugSettings& inOutDebugSettings)
+void ViewControlPanel::Render(ViewControlState& inOutState,
+                              clf::core::SimulationDebugSettings& inOutDebugSettings,
+                              clf::core::Camera3D& camera3D,
+                              bool hasSelection)
 {
     ImGui::Begin("View");
+
+    const char* renderLabels[] = {"Top-down 2D", "Perspective 3D"};
+    int rm = static_cast<int>(inOutState.renderMode);
+    if (ImGui::Combo("Render mode", &rm, renderLabels, IM_ARRAYSIZE(renderLabels))) {
+        inOutState.renderMode = static_cast<clf::render::RenderMode>(rm);
+    }
+
+    if (inOutState.renderMode == clf::render::RenderMode::Perspective3D) {
+        ImGui::Separator();
+        ImGui::TextUnformatted("3D camera");
+
+        float yaw = camera3D.YawRad();
+        float pitch = camera3D.PitchRad();
+        float dist = camera3D.DistanceMeters();
+
+        if (ImGui::SliderFloat("Yaw (rad)", &yaw, -3.14159f, 3.14159f)) {
+            camera3D.Orbit(yaw - camera3D.YawRad(), 0.0f);
+        }
+        if (ImGui::SliderFloat("Pitch (rad)", &pitch, 0.17f, 1.48f)) {
+            camera3D.Orbit(0.0f, pitch - camera3D.PitchRad());
+        }
+        if (ImGui::SliderFloat("Distance (m)", &dist, 50.0f, 8000.0f)) {
+            camera3D.Zoom(dist - camera3D.DistanceMeters());
+        }
+
+        ImGui::Checkbox("Follow selected", &inOutState.followSelected);
+        if (!hasSelection) {
+            ImGui::BeginDisabled();
+        }
+        if (ImGui::Button("Focus selected")) {
+            inOutState.requestFocusSelected = true;
+        }
+        if (!hasSelection) {
+            ImGui::EndDisabled();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset camera")) {
+            camera3D.Reset();
+        }
+    }
 
     const char* current = ViewModeLabel(inOutState.viewMode);
     if (ImGui::BeginCombo("View mode", current)) {

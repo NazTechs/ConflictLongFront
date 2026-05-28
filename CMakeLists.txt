@@ -11,6 +11,7 @@ add_executable(ConflictLongFront
     src/core/Application.cpp
     src/core/Time.cpp
     src/core/Camera2D.cpp
+    src/core/Camera3D.cpp
     src/core/AppSettings.cpp
     src/core/SettingsManager.cpp
     src/sim/World.cpp
@@ -31,6 +32,7 @@ add_executable(ConflictLongFront
     src/sim/visibility/FogOfWarSystem.cpp
     src/sim/visibility/TeamFogOfWarSystem.cpp
     src/render/Renderer2D.cpp
+    src/render/Renderer3D.cpp
     src/render/TerrainRenderer.cpp
     src/render/DebugOverlayRenderer.cpp
     src/render/CameraController.cpp

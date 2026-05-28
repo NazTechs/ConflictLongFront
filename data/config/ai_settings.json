@@ -17,11 +17,10 @@
   },
   "fog_of_war": {
     "enabled": true,
-    "grid_resolution_m": 100.0,
-    "update_rate_hz": 8.0,
+    "grid_resolution_m": 150.0,
+    "update_rate_hz": 6.0,
     "visible_brightness": 1.0,
     "known_brightness": 0.45,
     "unknown_brightness": 0.15
   }
 }
-

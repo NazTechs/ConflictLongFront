@@ -2,8 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
-
-#include <glm/gtc/noise.hpp>
+#include <cstdint>
 
 namespace clf::sim::terrain {
 
@@ -11,7 +10,57 @@ namespace {
 
 constexpr double kHalfWorld = Terrain::kWorldSizeMeters * 0.5;
 
-double FractalNoise2D(const glm::dvec2& p, int octaves, double lacunarity, double gain)
+std::uint32_t Hash32(std::uint32_t x)
+{
+    x ^= x >> 16;
+    x *= 0x7feb352dU;
+    x ^= x >> 15;
+    x *= 0x846ca68bU;
+    x ^= x >> 16;
+    return x;
+}
+
+double Hash2D01(int x, int y, std::uint32_t seed)
+{
+    const std::uint32_t ux = static_cast<std::uint32_t>(x);
+    const std::uint32_t uy = static_cast<std::uint32_t>(y);
+    std::uint32_t h = seed;
+    h ^= Hash32(ux + 0x9e3779b9U);
+    h ^= Hash32(uy + 0x85ebca6bU);
+    h = Hash32(h);
+    return static_cast<double>(h) / static_cast<double>(0xFFFFFFFFu);
+}
+
+double Smoothstep(double t)
+{
+    t = std::clamp(t, 0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
+}
+
+double ValueNoise2D(const glm::dvec2& p, double frequency, std::uint32_t seed)
+{
+    const double x = p.x * frequency;
+    const double y = p.y * frequency;
+
+    const int x0 = static_cast<int>(std::floor(x));
+    const int y0 = static_cast<int>(std::floor(y));
+    const int x1 = x0 + 1;
+    const int y1 = y0 + 1;
+
+    const double tx = Smoothstep(x - static_cast<double>(x0));
+    const double ty = Smoothstep(y - static_cast<double>(y0));
+
+    const double v00 = Hash2D01(x0, y0, seed);
+    const double v10 = Hash2D01(x1, y0, seed);
+    const double v01 = Hash2D01(x0, y1, seed);
+    const double v11 = Hash2D01(x1, y1, seed);
+
+    const double a = v00 + (v10 - v00) * tx;
+    const double b = v01 + (v11 - v01) * tx;
+    return a + (b - a) * ty; // [0..1]
+}
+
+double FractalValueNoise2D(const glm::dvec2& p, int octaves, double lacunarity, double gain, std::uint32_t seed)
 {
     double amp = 1.0;
     double freq = 1.0;
@@ -19,7 +68,7 @@ double FractalNoise2D(const glm::dvec2& p, int octaves, double lacunarity, doubl
     double norm = 0.0;
 
     for (int i = 0; i < octaves; ++i) {
-        sum += amp * glm::simplex(p * freq);
+        sum += amp * ValueNoise2D(p, freq, seed + static_cast<std::uint32_t>(i) * 1013u);
         norm += amp;
         amp *= gain;
         freq *= lacunarity;
@@ -28,7 +77,9 @@ double FractalNoise2D(const glm::dvec2& p, int octaves, double lacunarity, doubl
     if (norm <= 0.0) {
         return 0.0;
     }
-    return sum / norm; // roughly [-1, +1]
+
+    // Map from [0..1] to [-1..1]
+    return (sum / norm) * 2.0 - 1.0;
 }
 
 } // namespace
@@ -43,28 +94,40 @@ Terrain::Terrain(int samplesPerSide, double cellSize_m)
 
 void Terrain::GenerateProcedural(std::uint32_t seed)
 {
-    // Deterministic procedural terrain using GLM simplex noise + a broad ridge so LOS has interesting cases.
+    // Deterministic procedural terrain using cheap value-noise FBM + a broad ridge so LOS has interesting cases.
     const double seedOffset = static_cast<double>(seed) * 0.001;
 
-    for (int y = 0; y < m_samplesPerSide; ++y) {
-        for (int x = 0; x < m_samplesPerSide; ++x) {
-            const double wx = -kHalfWorld + static_cast<double>(x) * m_cellSize_m;
-            const double wy = -kHalfWorld + static_cast<double>(y) * m_cellSize_m;
+    // Precompute X-dependent terms (ridge + normalized X) to avoid expensive pow/exp per cell.
+    std::vector<double> nxByX(static_cast<std::size_t>(m_samplesPerSide));
+    std::vector<double> ridgeByX(static_cast<std::size_t>(m_samplesPerSide));
 
-            // Normalize to ~[0..1] range for stable noise inputs.
-            const double nx = (wx / Terrain::kWorldSizeMeters) + seedOffset;
-            const double ny = (wy / Terrain::kWorldSizeMeters) - seedOffset;
+    for (int x = 0; x < m_samplesPerSide; ++x) {
+        const double wx = -kHalfWorld + static_cast<double>(x) * m_cellSize_m;
+        const double nx = (wx / Terrain::kWorldSizeMeters) + seedOffset;
+        nxByX[static_cast<std::size_t>(x)] = nx;
+
+        // Broad ridge centered at x=0 to create LOS-blocking opportunities.
+        const double t = wx / 900.0;
+        ridgeByX[static_cast<std::size_t>(x)] = std::exp(-(t * t));
+    }
+
+    for (int y = 0; y < m_samplesPerSide; ++y) {
+        const double wy = -kHalfWorld + static_cast<double>(y) * m_cellSize_m;
+        const double ny = (wy / Terrain::kWorldSizeMeters) - seedOffset;
+
+        for (int x = 0; x < m_samplesPerSide; ++x) {
+            const double nx = nxByX[static_cast<std::size_t>(x)];
+            const double ridge = ridgeByX[static_cast<std::size_t>(x)];
 
             // Large scale undulation + smaller detail.
-            const double n0 = FractalNoise2D(glm::dvec2(nx * 2.0, ny * 2.0), 5, 2.0, 0.5);
-            const double n1 = FractalNoise2D(glm::dvec2(nx * 14.0, ny * 14.0), 3, 2.1, 0.55);
-
-            // Broad ridge centered at x=0 to create guaranteed LOS-blocking opportunities.
-            const double ridge = std::exp(-std::pow(wx / 900.0, 2.0)); // ~900m half-width
+            // Keep octaves modest; this runs over ~1M samples.
+            const glm::dvec2 p0(nx * 2.0, ny * 2.0);
+            const glm::dvec2 p1(nx * 12.0, ny * 12.0);
+            const double n0 = FractalValueNoise2D(p0, 4, 2.0, 0.5, seed);
+            const double n1 = FractalValueNoise2D(p1, 2, 2.1, 0.55, seed ^ 0xB5297A4Du);
 
             // Heights in meters. Keep it plausible (tens to a few hundred meters of relief).
             const double height_m = (n0 * 220.0) + (n1 * 35.0) + (ridge * 140.0) - 40.0;
-
             m_height_m[static_cast<std::size_t>(Index(x, y))] = height_m;
         }
     }
@@ -156,4 +219,3 @@ void Terrain::RecomputeStats()
 }
 
 } // namespace clf::sim::terrain
-

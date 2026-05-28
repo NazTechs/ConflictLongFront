@@ -41,7 +41,8 @@ void FogOfWarRenderer::EnsureTexture(int w, int h)
         return;
     }
 
-    m_texture = SDL_CreateTexture(m_renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+    // Use SDL_PIXELFORMAT_RGBA32 so we can write pixels as SDL_Color (r,g,b,a bytes).
+    m_texture = SDL_CreateTexture(m_renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, w, h);
     if (m_texture) {
         SDL_SetTextureBlendMode(m_texture, SDL_BLENDMODE_BLEND);
         m_texW = w;
@@ -78,7 +79,7 @@ void FogOfWarRenderer::Render(sim::visibility::VisibilityMask& mask,
             const std::uint8_t aKnown = static_cast<std::uint8_t>(std::clamp(options.known_alpha, 0.0f, 1.0f) * 255.0f);
 
             for (int y = 0; y < mask.Height(); ++y) {
-                auto* dst = reinterpret_cast<std::uint32_t*>(row);
+                auto* dst = reinterpret_cast<std::uint8_t*>(row);
                 for (int x = 0; x < mask.Width(); ++x) {
                     const auto v = cells[static_cast<std::size_t>(y) * static_cast<std::size_t>(mask.Width()) + static_cast<std::size_t>(x)];
                     std::uint8_t a = 0;
@@ -90,8 +91,12 @@ void FogOfWarRenderer::Render(sim::visibility::VisibilityMask& mask,
                         a = 0;
                     }
 
-                    // RGBA8888
-                    dst[x] = (static_cast<std::uint32_t>(a) << 24) | 0x000000u;
+                    // SDL_PIXELFORMAT_RGBA32: 4 bytes per pixel: r,g,b,a
+                    const std::size_t off = static_cast<std::size_t>(x) * 4u;
+                    dst[off + 0] = 0;
+                    dst[off + 1] = 0;
+                    dst[off + 2] = 0;
+                    dst[off + 3] = a;
                 }
                 row += pitch;
             }

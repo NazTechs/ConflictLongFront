@@ -85,7 +85,7 @@ AiSettings LoadAiSettingsOrDefaults(const std::filesystem::path& path)
     out.turret.scan_speed_deg_s = Clamp(out.turret.scan_speed_deg_s, 1.0, 180.0);
     out.turret.scan_arc_deg = Clamp(out.turret.scan_arc_deg, 10.0, 360.0);
 
-    out.fog_of_war.grid_resolution_m = Clamp(out.fog_of_war.grid_resolution_m, 10.0, 500.0);
+    out.fog_of_war.grid_resolution_m = Clamp(out.fog_of_war.grid_resolution_m, 50.0, 500.0);
     out.fog_of_war.update_rate_hz = Clamp(out.fog_of_war.update_rate_hz, 0.5, 30.0);
     out.fog_of_war.visible_brightness = Clamp(out.fog_of_war.visible_brightness, 0.0, 1.0);
     out.fog_of_war.known_brightness = Clamp(out.fog_of_war.known_brightness, 0.0, 1.0);
@@ -95,4 +95,3 @@ AiSettings LoadAiSettingsOrDefaults(const std::filesystem::path& path)
 }
 
 } // namespace clf::sim::ai
-

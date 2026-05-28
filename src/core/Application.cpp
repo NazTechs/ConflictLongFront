@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <limits>
 #include <string>
 
@@ -14,11 +15,13 @@
 #include <imgui_impl_sdlrenderer3.h>
 
 #include "core/Camera2D.hpp"
+#include "core/Camera3D.hpp"
 #include "core/SettingsManager.hpp"
 #include "core/ScopedTimer.hpp"
 #include "core/Time.hpp"
 #include "render/CameraController.hpp"
 #include "render/Renderer2D.hpp"
+#include "render/Renderer3D.hpp"
 #include "sim/Components.hpp"
 #include "sim/ScenarioManager.hpp"
 #include "sim/World.hpp"
@@ -53,18 +56,22 @@ Application::~Application()
 
 int Application::Run()
 {
-    core::ScopedTimer totalStartup("[Startup] Total startup");
+    const auto startupStart = std::chrono::steady_clock::now();
 
     if (!InitSDL()) {
         return 1;
     }
 
-    core::ScopedTimer settingsTimer("[Startup] Load settings");
-    m_settingsManager = std::make_unique<core::SettingsManager>(ResolveSettingsDir());
-
-    const core::AppSettings loaded = m_settingsManager->LoadOrDefaults();
+    core::AppSettings loaded{};
+    {
+        core::ScopedTimer timer("[Startup] Load settings");
+        m_settingsManager =
+            std::make_unique<core::SettingsManager>(ResolveSettingsDir());
+        loaded = m_settingsManager->LoadOrDefaults();
+    }
 
     m_viewMode = loaded.viewMode;
+    m_renderMode = loaded.renderMode;
     m_paused = loaded.paused;
     m_simSpeed = std::clamp(loaded.simulationSpeed, 0.0, 4.0);
     m_debugSettings = loaded.debug;
@@ -75,6 +82,8 @@ int Application::Run()
     m_battleState.simSpeed = static_cast<float>(m_simSpeed);
 
     m_viewState.viewMode = m_viewMode;
+    m_viewState.renderMode = m_renderMode;
+    m_viewState.followSelected = loaded.cam3d_follow_selected;
 
     m_imguiIniPath = m_settingsManager->ImGuiIniPath().string();
 
@@ -85,15 +94,28 @@ int Application::Run()
         }
     }
 
-    core::ScopedTimer worldInit("[Startup] Create world/systems");
-    m_time = std::make_unique<Time>();
-    m_camera = std::make_unique<Camera2D>();
-    m_world = std::make_unique<sim::World>();
-    m_scenarioManager = std::make_unique<sim::ScenarioManager>(*m_world);
-    m_renderer2D = std::make_unique<render::Renderer2D>(m_renderer);
-    m_cameraController = std::make_unique<render::CameraController>();
-    m_fogSystem = std::make_unique<sim::visibility::FogOfWarSystem>();
-    m_teamFogSystem = std::make_unique<sim::visibility::TeamFogOfWarSystem>();
+    {
+        core::ScopedTimer timer("[Startup] Create world/systems");
+        m_time = std::make_unique<Time>();
+        m_camera = std::make_unique<Camera2D>();
+        m_camera3D = std::make_unique<Camera3D>();
+        m_camera3D->Reset();
+        m_camera3D->SetYawPitchDistance(
+            loaded.cam3d_yaw_rad,
+            loaded.cam3d_pitch_rad,
+            loaded.cam3d_distance_m);
+        m_camera3D->SetTarget(glm::vec3(
+            loaded.cam3d_target_x_m,
+            0.0f,
+            loaded.cam3d_target_z_m));
+        m_world = std::make_unique<sim::World>();
+        m_scenarioManager = std::make_unique<sim::ScenarioManager>(*m_world);
+        m_renderer2D = std::make_unique<render::Renderer2D>(m_renderer);
+        m_renderer3D = std::make_unique<render::Renderer3D>(m_renderer);
+        m_cameraController = std::make_unique<render::CameraController>();
+        m_fogSystem = std::make_unique<sim::visibility::FogOfWarSystem>();
+        m_teamFogSystem = std::make_unique<sim::visibility::TeamFogOfWarSystem>();
+    }
 
     m_battleControlPanel = std::make_unique<ui::BattleControlPanel>();
     m_viewControlPanel = std::make_unique<ui::ViewControlPanel>();
@@ -121,7 +143,12 @@ int Application::Run()
 
     {
         core::ScopedTimer t("[Startup] Spawn scenario");
-        m_scenarioManager->Restart(initial);
+    m_scenarioManager->Restart(initial);
+
+    const auto startupEnd = std::chrono::steady_clock::now();
+    const auto totalMs =
+        std::chrono::duration_cast<std::chrono::milliseconds>(startupEnd - startupStart).count();
+    spdlog::info("[Startup] Total startup: {} ms", totalMs);
     }
 
     m_running = true;
@@ -234,6 +261,15 @@ void Application::ShutdownImGui()
         core::AppSettings s{};
 
         s.viewMode = m_viewMode;
+        s.renderMode = m_renderMode;
+        if (m_camera3D) {
+            s.cam3d_yaw_rad = m_camera3D->YawRad();
+            s.cam3d_pitch_rad = m_camera3D->PitchRad();
+            s.cam3d_distance_m = m_camera3D->DistanceMeters();
+            s.cam3d_target_x_m = m_camera3D->Target().x;
+            s.cam3d_target_z_m = m_camera3D->Target().z;
+            s.cam3d_follow_selected = m_viewState.followSelected;
+        }
         s.paused = m_paused;
         s.simulationSpeed = std::clamp(m_simSpeed, 0.0, 4.0);
         s.lastRandomSeed = m_battleState.seed;
@@ -297,13 +333,27 @@ void Application::ProcessEvents()
 
         if (event.type == SDL_EVENT_MOUSE_WHEEL) {
             const float y = event.wheel.y;
-            const double factor = std::pow(1.1, static_cast<double>(y));
-            m_camera->MultiplyZoom(factor);
+            if (m_renderMode == render::RenderMode::Perspective3D && m_camera3D) {
+                m_camera3D->Zoom(static_cast<float>(-y) * 80.0f);
+            } else {
+                const double factor = std::pow(1.1, static_cast<double>(y));
+                m_camera->MultiplyZoom(factor);
+            }
         }
 
         if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
             event.button.button == SDL_BUTTON_LEFT) {
             SelectEntityAtScreen(event.button.x, event.button.y);
+        }
+
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+            event.button.button == SDL_BUTTON_MIDDLE) {
+            m_middleMouseDown = true;
+        }
+
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_MIDDLE) {
+            m_middleMouseDown = false;
         }
 
         if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
@@ -328,8 +378,9 @@ void Application::ProcessEvents()
         }
 
         if (event.type == SDL_EVENT_MOUSE_MOTION && m_rightMouseDown) {
-            if (m_viewMode == render::ViewMode::Spectator ||
-                m_viewMode == render::ViewMode::DebugTactical) {
+            if (m_renderMode == render::RenderMode::TopDown2D &&
+                (m_viewMode == render::ViewMode::Spectator ||
+                 m_viewMode == render::ViewMode::DebugTactical)) {
                 m_camera->PanPixels(
                     static_cast<double>(-event.motion.xrel),
                     static_cast<double>(-event.motion.yrel));
@@ -338,6 +389,14 @@ void Application::ProcessEvents()
                     std::abs(event.motion.yrel) > 1.0f) {
                     m_rightMouseMoved = true;
                 }
+            }
+        }
+
+        if (event.type == SDL_EVENT_MOUSE_MOTION && m_middleMouseDown) {
+            if (m_renderMode == render::RenderMode::Perspective3D && m_camera3D) {
+                const float dx = static_cast<float>(event.motion.xrel);
+                const float dy = static_cast<float>(event.motion.yrel);
+                m_camera3D->Orbit(dx * 0.006f, dy * 0.006f);
             }
         }
 
@@ -371,11 +430,22 @@ void Application::IssueWaypointAtScreen(float xPx, float yPx, bool append)
         return;
     }
 
-    const glm::dvec2 worldPos =
-        m_camera->ScreenToWorldMeters(
-            glm::vec2(xPx, yPx),
-            w,
-            h);
+    glm::dvec2 worldPos{};
+
+    if (m_renderMode == render::RenderMode::Perspective3D && m_camera3D) {
+        glm::vec2 hit{};
+        const Ray3D ray = m_camera3D->ScreenPointToRay(xPx, yPx, w, h);
+        if (!m_camera3D->RaycastGroundPlaneY0(ray, hit)) {
+            return;
+        }
+        worldPos = glm::dvec2(hit.x, hit.y);
+    } else {
+        worldPos =
+            m_camera->ScreenToWorldMeters(
+                glm::vec2(xPx, yPx),
+                w,
+                h);
+    }
 
     auto& mode =
         registry.get_or_emplace<sim::ControlModeComponent>(m_selectedEntity);
@@ -404,6 +474,45 @@ void Application::UpdateCamera(double frameDtSeconds)
     }
 
     if (io.WantCaptureKeyboard) {
+        return;
+    }
+
+    if (m_renderMode == render::RenderMode::Perspective3D && m_camera3D) {
+        int numKeys = 0;
+        const bool* keys = SDL_GetKeyboardState(&numKeys);
+        if (keys == nullptr || numKeys == 0) {
+            return;
+        }
+
+        float speed = 200.0f; // m/s target pan
+        if (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]) {
+            speed *= 3.0f;
+        }
+
+        float dx = 0.0f;
+        float dz = 0.0f;
+        if (keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_LEFT]) dx -= 1.0f;
+        if (keys[SDL_SCANCODE_D] || keys[SDL_SCANCODE_RIGHT]) dx += 1.0f;
+        if (keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP]) dz -= 1.0f;
+        if (keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN]) dz += 1.0f;
+
+        if (dx != 0.0f || dz != 0.0f) {
+            const float len = std::sqrt(dx * dx + dz * dz);
+            dx /= len;
+            dz /= len;
+            m_camera3D->PanTargetGround(dx * speed * static_cast<float>(frameDtSeconds),
+                                        dz * speed * static_cast<float>(frameDtSeconds));
+        }
+
+        if (m_viewState.followSelected &&
+            m_selectedEntity != entt::null &&
+            m_world &&
+            m_world->Registry().valid(m_selectedEntity) &&
+            m_world->Registry().all_of<sim::Transform>(m_selectedEntity)) {
+            const auto& xf = m_world->Registry().get<const sim::Transform>(m_selectedEntity);
+            m_camera3D->SetTarget(glm::vec3(static_cast<float>(xf.position_m.x), 0.0f, static_cast<float>(xf.position_m.y)));
+        }
+
         return;
     }
 
@@ -471,11 +580,22 @@ void Application::SelectEntityAtScreen(float xPx, float yPx)
         return;
     }
 
-    const glm::dvec2 worldPos =
-        m_camera->ScreenToWorldMeters(
-            glm::vec2(xPx, yPx),
-            w,
-            h);
+    glm::dvec2 worldPos{};
+
+    if (m_renderMode == render::RenderMode::Perspective3D && m_camera3D) {
+        glm::vec2 hit{};
+        const Ray3D ray = m_camera3D->ScreenPointToRay(xPx, yPx, w, h);
+        if (!m_camera3D->RaycastGroundPlaneY0(ray, hit)) {
+            return;
+        }
+        worldPos = glm::dvec2(hit.x, hit.y);
+    } else {
+        worldPos =
+            m_camera->ScreenToWorldMeters(
+                glm::vec2(xPx, yPx),
+                w,
+                h);
+    }
 
     entt::entity best = entt::null;
 
@@ -570,11 +690,31 @@ void Application::RenderFrame()
     }
 
     if (m_viewControlPanel && m_cameraController) {
-        m_viewControlPanel->Render(m_viewState, m_debugSettings);
+        m_viewControlPanel->Render(
+            m_viewState,
+            m_debugSettings,
+            *m_camera3D,
+            (m_selectedEntity != entt::null));
 
         m_viewMode = m_viewState.viewMode;
+        m_renderMode = m_viewState.renderMode;
 
         m_cameraController->SetViewMode(m_viewState.viewMode);
+    }
+
+    if (m_camera3D && m_viewState.requestFocusSelected) {
+        m_viewState.requestFocusSelected = false;
+        if (m_world &&
+            m_selectedEntity != entt::null &&
+            m_world->Registry().valid(m_selectedEntity) &&
+            m_world->Registry().all_of<sim::Transform>(m_selectedEntity)) {
+            const auto& xf =
+                m_world->Registry().get<const sim::Transform>(m_selectedEntity);
+            m_camera3D->SetTarget(glm::vec3(
+                static_cast<float>(xf.position_m.x),
+                0.0f,
+                static_cast<float>(xf.position_m.y)));
+        }
     }
 
     if (m_selectedUnitPanel) {
@@ -595,6 +735,13 @@ void Application::RenderFrame()
         1.0f);
 
     SDL_RenderClear(m_renderer);
+
+    if (m_camera3D) {
+        const float aspect =
+            (h > 0) ? (static_cast<float>(w) / static_cast<float>(h))
+                    : (16.0f / 9.0f);
+        m_camera3D->SetAspect(aspect);
+    }
 
     render::Renderer2D::Options renderOptions{};
 
@@ -677,12 +824,36 @@ void Application::RenderFrame()
                 : 0.0f;
     }
 
-    m_renderer2D->Render(
-        *m_world,
-        *m_camera,
-        w,
-        h,
-        renderOptions);
+    if (m_renderMode == render::RenderMode::Perspective3D && m_renderer3D && m_camera3D) {
+        static double logAccum_s = 0.0;
+        logAccum_s += m_time ? m_time->DeltaSeconds() : 0.0;
+        if (logAccum_s > 2.0) {
+            logAccum_s = 0.0;
+            const auto pos = m_camera3D->Position();
+            const auto tgt = m_camera3D->Target();
+            spdlog::info(
+                "[3D] cam pos (%.1f, %.1f, %.1f) target (%.1f, %.1f, %.1f) yaw %.2f pitch %.2f dist %.1f",
+                pos.x, pos.y, pos.z,
+                tgt.x, tgt.y, tgt.z,
+                m_camera3D->YawRad(),
+                m_camera3D->PitchRad(),
+                m_camera3D->DistanceMeters());
+        }
+
+        render::Renderer3DOptions opt3d{};
+        opt3d.showGrid = true;
+        opt3d.showWaypoints = true;
+        // Disable 3D fog while bringing up the renderer (can be re-enabled once visuals are confirmed).
+        opt3d.showFog = false;
+        opt3d.fogStrideCells = 4;
+        opt3d.fogMask = renderOptions.fogMask;
+        opt3d.fogUnknownAlpha = renderOptions.fog.unknown_alpha;
+        opt3d.fogKnownAlpha = renderOptions.fog.known_alpha;
+
+        m_renderer3D->Render(*m_world, *m_camera3D, w, h, m_selectedEntity, opt3d);
+    } else {
+        m_renderer2D->Render(*m_world, *m_camera, w, h, renderOptions);
+    }
 
     ImGui_ImplSDLRenderer3_RenderDrawData(
         ImGui::GetDrawData(),

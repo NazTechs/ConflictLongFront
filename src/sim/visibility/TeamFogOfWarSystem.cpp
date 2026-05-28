@@ -23,6 +23,38 @@ double WrapAngleRad(double a)
     return a;
 }
 
+bool HasLosFast(const terrain::Terrain& terrain,
+                const glm::dvec2& aXY,
+                double aHeightAGL_m,
+                const glm::dvec2& bXY,
+                double bHeightAGL_m)
+{
+    const glm::dvec2 delta = bXY - aXY;
+    const double dist_m = glm::length(delta);
+    if (dist_m <= 1e-6) {
+        return true;
+    }
+
+    const double z0_m = terrain.HeightAtXY(aXY) + aHeightAGL_m;
+    const double z1_m = terrain.HeightAtXY(bXY) + bHeightAGL_m;
+
+    const double step_m = std::clamp(terrain.CellSizeMeters() * 2.0, 50.0, 200.0);
+    const int steps = std::min(96, std::max(2, static_cast<int>(std::ceil(dist_m / step_m))));
+
+    constexpr double epsilon_m = 0.05;
+    for (int i = 1; i < steps; ++i) {
+        const double t = static_cast<double>(i) / static_cast<double>(steps);
+        const glm::dvec2 p = aXY + delta * t;
+        const double terrainZ_m = terrain.HeightAtXY(p);
+        const double rayZ_m = z0_m + (z1_m - z0_m) * t;
+        if (terrainZ_m > rayZ_m - epsilon_m) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 } // namespace
 
 void TeamFogOfWarSystem::Configure(const TeamFogParams& p)
@@ -140,7 +172,7 @@ void TeamFogOfWarSystem::Update(entt::registry& registry, const terrain::Terrain
                 if (std::abs(da) > halfFov) {
                     continue;
                 }
-                if (hasLineOfSight(terrain, xf.position_m, tank.sensor_height_m, cellCenter, 0.0, nullptr)) {
+                if (HasLosFast(terrain, xf.position_m, tank.sensor_height_m, cellCenter, 0.0)) {
                     mask.Set(x, y, CellVis::Visible);
                 }
             }
@@ -149,4 +181,3 @@ void TeamFogOfWarSystem::Update(entt::registry& registry, const terrain::Terrain
 }
 
 } // namespace clf::sim::visibility
-

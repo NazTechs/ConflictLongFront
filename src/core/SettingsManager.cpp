@@ -59,6 +59,13 @@ AppSettings SettingsManager::LoadOrDefaults() const
     }
 
     out.viewMode = ViewModeFromString(j.value("view_mode", "Spectator"), out.viewMode);
+    out.renderMode = static_cast<render::RenderMode>(j.value("render_mode", static_cast<int>(out.renderMode)));
+    out.cam3d_yaw_rad = j.value("cam3d_yaw_rad", out.cam3d_yaw_rad);
+    out.cam3d_pitch_rad = j.value("cam3d_pitch_rad", out.cam3d_pitch_rad);
+    out.cam3d_distance_m = j.value("cam3d_distance_m", out.cam3d_distance_m);
+    out.cam3d_target_x_m = j.value("cam3d_target_x_m", out.cam3d_target_x_m);
+    out.cam3d_target_z_m = j.value("cam3d_target_z_m", out.cam3d_target_z_m);
+    out.cam3d_follow_selected = j.value("cam3d_follow_selected", out.cam3d_follow_selected);
     out.paused = j.value("paused", out.paused);
     out.simulationSpeed = j.value("simulation_speed", out.simulationSpeed);
     out.lastRandomSeed = j.value("last_random_seed", out.lastRandomSeed);
@@ -99,6 +106,13 @@ void SettingsManager::Save(const AppSettings& settings) const
 
     json j;
     j["view_mode"] = ToString(settings.viewMode);
+    j["render_mode"] = static_cast<int>(settings.renderMode);
+    j["cam3d_yaw_rad"] = settings.cam3d_yaw_rad;
+    j["cam3d_pitch_rad"] = settings.cam3d_pitch_rad;
+    j["cam3d_distance_m"] = settings.cam3d_distance_m;
+    j["cam3d_target_x_m"] = settings.cam3d_target_x_m;
+    j["cam3d_target_z_m"] = settings.cam3d_target_z_m;
+    j["cam3d_follow_selected"] = settings.cam3d_follow_selected;
     j["paused"] = settings.paused;
     j["simulation_speed"] = settings.simulationSpeed;
     j["last_random_seed"] = settings.lastRandomSeed;

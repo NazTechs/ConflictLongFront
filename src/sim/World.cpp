@@ -1,6 +1,7 @@
 #include "sim/World.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <random>
 #include <vector>
@@ -31,7 +32,7 @@ using json = nlohmann::json;
 
 namespace {
 
-constexpr double kTerrainCellSize_m = 20.0;
+constexpr double kTerrainCellSize_m = 50.0;
 constexpr int kTerrainSamplesPerSide = static_cast<int>(terrain::Terrain::kWorldSizeMeters / kTerrainCellSize_m) + 1;
 
 constexpr double kHalfWorld_m = terrain::Terrain::kWorldSizeMeters * 0.5;
@@ -41,7 +42,6 @@ constexpr double kHalfWorld_m = terrain::Terrain::kWorldSizeMeters * 0.5;
 World::World()
     : m_terrain(kTerrainSamplesPerSide, kTerrainCellSize_m)
 {
-    m_terrain.GenerateProcedural(1337);
 }
 
 bool World::LoadData(const std::filesystem::path& dataDir)
@@ -114,21 +114,28 @@ void World::LoadFallbackSample()
 
 void World::RestartFromLoadedData(std::uint32_t seed)
 {
+    core::ScopedTimer total("[Startup] RestartFromLoadedData");
     m_seed = seed;
     m_registry.clear();
     m_debugLines.clear();
     m_combatLog.Clear();
     m_simTimeSeconds = 0.0;
 
-    m_terrain.GenerateProcedural(seed);
+    {
+        core::ScopedTimer t("[Startup] Terrain::GenerateProcedural");
+        m_terrain.GenerateProcedural(seed);
+    }
 
-    for (const auto& u : m_units) {
+    {
+        core::ScopedTimer t("[Startup] Spawn entities");
+        for (const auto& u : m_units) {
         const auto weaponIt = m_weapons.find(u.weaponId);
         if (weaponIt == m_weapons.end()) {
             continue;
         }
         SpawnTankFromDef(u.name, u.teamId, u.health, u.headingRad, u.radius_m, u.sensorHeight_m, u.visualRange_m,
                          u.px, u.py, u.vx, u.vy, u.weaponId, weaponIt->second);
+    }
     }
 }
 
@@ -310,12 +317,20 @@ bool World::LoadWeapons(const std::filesystem::path& filePath)
 
 bool World::LoadUnits(const std::filesystem::path& filePath)
 {
+    core::ScopedTimer total("[Startup] units.json total");
+
+    const auto tReadStart = std::chrono::steady_clock::now();
     std::ifstream f(filePath);
     if (!f.is_open()) {
         spdlog::error("Unable to open units file '{}'", filePath.string());
         return false;
     }
+    const auto tReadEnd = std::chrono::steady_clock::now();
+    spdlog::info(
+        "[Startup] units.json open file: {} ms",
+        std::chrono::duration_cast<std::chrono::milliseconds>(tReadEnd - tReadStart).count());
 
+    const auto tParseStart = std::chrono::steady_clock::now();
     json j;
     try {
         j = json::parse(f);
@@ -323,12 +338,17 @@ bool World::LoadUnits(const std::filesystem::path& filePath)
         spdlog::error("Failed to parse units file '{}': {}", filePath.string(), e.what());
         return false;
     }
+    const auto tParseEnd = std::chrono::steady_clock::now();
+    spdlog::info(
+        "[Startup] units.json parse: {} ms",
+        std::chrono::duration_cast<std::chrono::milliseconds>(tParseEnd - tParseStart).count());
 
     if (!j.contains("units") || !j["units"].is_array()) {
         spdlog::error("units.json must contain an array field 'units'");
         return false;
     }
 
+    const auto tBuildStart = std::chrono::steady_clock::now();
     for (const json& u : j["units"]) {
         const std::string type = u.value("type", "");
         if (type != "tank") {
@@ -370,9 +390,13 @@ bool World::LoadUnits(const std::filesystem::path& filePath)
         def.weaponId = weaponId;
         m_units.push_back(def);
     }
+    const auto tBuildEnd = std::chrono::steady_clock::now();
+    spdlog::info(
+        "[Startup] units.json build defs: {} ms ({} units)",
+        std::chrono::duration_cast<std::chrono::milliseconds>(tBuildEnd - tBuildStart).count(),
+        static_cast<int>(m_units.size()));
 
-    RestartFromLoadedData(1337);
-    return UnitCount() > 0;
+    return !m_units.empty();
 }
 
 void World::SpawnTankFromDef(const std::string& name,
@@ -457,8 +481,6 @@ void World::ClearSimState()
     m_combatLog.Clear();
     m_simTimeSeconds = 0.0;
     m_seed = 1337;
-
-    m_terrain.GenerateProcedural(1337);
 }
 
 } // namespace clf::sim

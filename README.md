@@ -57,6 +57,13 @@ The build copies `data/` next to the executable automatically.
 - Right click: set manual waypoint for selected tank (Shift+Right click to append)
 - Esc: quit
 
+### 3D view controls (Perspective 3D)
+
+- View panel -> `Render mode`: switch `Top-down 2D` / `Perspective 3D`
+- Middle mouse drag: orbit camera (yaw/pitch)
+- Mouse wheel: zoom camera distance
+- WASD / Arrow keys: pan camera target on ground plane
+
 ## Persistent UI settings
 
 - ImGui window layout auto-saves to `data/settings/imgui.ini`.
